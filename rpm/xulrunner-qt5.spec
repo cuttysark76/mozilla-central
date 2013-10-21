@@ -96,6 +96,7 @@ echo "ac_add_options --disable-javaxpcom" >> mozconfig
 echo "ac_add_options --disable-crashreporter" >> mozconfig
 echo "ac_add_options --without-x" >> mozconfig
 echo "ac_add_options --with-app-name=%{name}" >> mozconfig
+echo "ac_add_options --disable-webm" >> mozconfig
 export MOZCONFIG=$PWD/mozconfig
 %{__make} -f client.mk build STRIP="/bin/true" %{?jobs:MOZ_MAKE_FLAGS="-j%jobs"}
 
