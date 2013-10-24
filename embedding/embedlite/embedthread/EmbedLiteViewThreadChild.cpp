@@ -547,9 +547,19 @@ EmbedLiteViewThreadChild::RecvAsyncScrollDOMEvent(const gfxRect& contentRect,
 
   if (sPostAZPCAsJson.scroll) {
     nsString data;
-    data.AppendPrintf("{ \"contentRect\" : { \"x\" : %f, \"y\" : %f", contentRect.x, contentRect.y);
-    data.AppendPrintf(", \"width\" : %f, \"height\" : %f", contentRect.width, contentRect.height);
-    data.AppendPrintf("}, \"scrollSize\" : { \"width\" : %f, \"height\" : %f }}", scrollSize.width, scrollSize.height);
+    data.AppendPrintf("{ \"contentRect\" : { \"x\" : ");
+    data.AppendFloat(contentRect.x);
+    data.AppendPrintf(", \"y\" : ");
+    data.AppendFloat(contentRect.y);
+    data.AppendPrintf(", \"width\" : ");
+    data.AppendFloat(contentRect.width);
+    data.AppendPrintf(", \"height\" : ");
+    data.AppendFloat(contentRect.height);
+    data.AppendPrintf("}, \"scrollSize\" : { \"width\" : ");
+    data.AppendFloat(scrollSize.width);
+    data.AppendPrintf(", \"height\" : ");
+    data.AppendFloat(scrollSize.height);
+    data.AppendPrintf(" }}");
     mHelper->RecvAsyncMessage(NS_LITERAL_STRING("AZPC:ScrollDOMEvent"), data);
   }
 
