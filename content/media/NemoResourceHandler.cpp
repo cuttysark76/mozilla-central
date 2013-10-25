@@ -12,6 +12,10 @@
 #include <policy/audio-resource.h>
 #include <policy/resource-set.h>
 #include "nsThreadUtils.h"
+#include "mozilla/Services.h"
+#include "nsIObserverService.h"
+#include "nsStringGlue.h"
+
 using namespace ResourcePolicy;
 
 namespace mozilla {
@@ -26,7 +30,16 @@ NemoResourceHandler::AquireResources(void* aHolder)
     {
         mGlobalHandler = new NemoResourceHandler();
     }
+
     mGlobalHandler->Aquire();
+
+    nsCOMPtr<nsIObserverService> obs =
+        mozilla::services::GetObserverService();
+    if (obs) {
+        nsString data;
+        data.AppendPrintf("{ \"owner\" : \"%p\", \"state\": \"play\" }", aHolder);
+        obs->NotifyObservers(nullptr, "media-decoder-info", data.get());
+    }
 }
 
 void
@@ -39,10 +52,31 @@ NemoResourceHandler::ReleaseResources(void* aHolder)
 
     mGlobalHandler->Release();
 
+    nsCOMPtr<nsIObserverService> obs =
+        mozilla::services::GetObserverService();
+    if (obs) {
+        nsString data;
+        data.AppendPrintf("{ \"owner\" : \"%p\", \"state\": \"pause\" }", aHolder);
+        obs->NotifyObservers(nullptr, "media-decoder-info", data.get());
+    }
+
     if (mGlobalHandler->CanDestroy())
     {
         delete mGlobalHandler;
         mGlobalHandler = nullptr;
+    }
+}
+
+void
+NemoResourceHandler::MediaInfo(void* aHolder, bool aHasAudio, bool aHasVideo)
+{
+    MOZ_ASSERT(NS_IsMainThread());
+    nsCOMPtr<nsIObserverService> obs =
+        mozilla::services::GetObserverService();
+    if (obs) {
+        nsString data;
+        data.AppendPrintf("{ \"owner\" : \"%p\", \"state\": \"meta\", \"a\" : %i, \"v\" : %i }", aHolder, aHasAudio, aHasVideo);
+        obs->NotifyObservers(nullptr, "media-decoder-info", data.get());
     }
 }
 

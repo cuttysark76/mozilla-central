@@ -14,6 +14,7 @@ class NemoResourceHandler
 public:
     static void AquireResources(void* aHolder);
     static void ReleaseResources(void* aHolder);
+    static void MediaInfo(void* aHolder, bool aHasAudio, bool aHasVideo);
 private:
     NemoResourceHandler();
     virtual ~NemoResourceHandler();

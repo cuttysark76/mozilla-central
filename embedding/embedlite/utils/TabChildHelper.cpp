@@ -34,6 +34,7 @@ static const char BEFORE_FIRST_PAINT[] = "before-first-paint";
 static const char CANCEL_DEFAULT_PAN_ZOOM[] = "cancel-default-pan-zoom";
 static const char BROWSER_ZOOM_TO_RECT[] = "browser-zoom-to-rect";
 static const char DETECT_SCROLLABLE_SUBFRAME[] = "detect-scrollable-subframe";
+static bool sDisableViewportHandler = getenv("NO_VIEWPORT") != 0;
 
 using namespace mozilla;
 using namespace mozilla::embedlite;
@@ -247,29 +248,31 @@ TabChildHelper::Observe(nsISupports* aSubject,
 
       mContentDocumentIsDisplayed = true;
 
-      // Reset CSS viewport and zoom to default on new page, then
-      // calculate them properly using the actual metadata from the
-      // page.
-      SetCSSViewport(kDefaultViewportSize);
+      if (!sDisableViewportHandler) {
+        // Reset CSS viewport and zoom to default on new page, then
+        // calculate them properly using the actual metadata from the
+        // page.
+        SetCSSViewport(kDefaultViewportSize);
 
-      // Calculate a really simple resolution that we probably won't
-      // be keeping, as well as putting the scroll offset back to
-      // the top-left of the page.
-      mLastMetrics.mViewport = CSSRect(CSSPoint(), kDefaultViewportSize);
-      mLastMetrics.mCompositionBounds = ScreenIntRect(ScreenIntPoint(), mInnerSize);
-      mLastMetrics.mZoom = mLastMetrics.CalculateIntrinsicScale();
-      mLastMetrics.mDevPixelsPerCSSPixel = CSSToLayoutDeviceScale(mView->mWidget->GetDefaultScale());
-      // We use ScreenToLayerScale(1) below in order to turn the
-      // async zoom amount into the gecko zoom amount.
-      mLastMetrics.mCumulativeResolution =
-        mLastMetrics.mZoom / mLastMetrics.mDevPixelsPerCSSPixel * ScreenToLayerScale(1);
-      // This is the root layer, so the cumulative resolution is the same
-      // as the resolution.
-      mLastMetrics.mResolution = mLastMetrics.mCumulativeResolution / LayoutDeviceToParentLayerScale(1);
-      mLastMetrics.mScrollOffset = CSSPoint(0, 0);
+        // Calculate a really simple resolution that we probably won't
+        // be keeping, as well as putting the scroll offset back to
+        // the top-left of the page.
+        mLastMetrics.mViewport = CSSRect(CSSPoint(), kDefaultViewportSize);
+        mLastMetrics.mCompositionBounds = ScreenIntRect(ScreenIntPoint(), mInnerSize);
+        mLastMetrics.mZoom = mLastMetrics.CalculateIntrinsicScale();
+        mLastMetrics.mDevPixelsPerCSSPixel = CSSToLayoutDeviceScale(mView->mWidget->GetDefaultScale());
+        // We use ScreenToLayerScale(1) below in order to turn the
+        // async zoom amount into the gecko zoom amount.
+        mLastMetrics.mCumulativeResolution =
+          mLastMetrics.mZoom / mLastMetrics.mDevPixelsPerCSSPixel * ScreenToLayerScale(1);
+        // This is the root layer, so the cumulative resolution is the same
+        // as the resolution.
+        mLastMetrics.mResolution = mLastMetrics.mCumulativeResolution / LayoutDeviceToParentLayerScale(1);
+        mLastMetrics.mScrollOffset = CSSPoint(0, 0);
 
-      utils->SetResolution(mLastMetrics.mResolution.scale,
-                           mLastMetrics.mResolution.scale);
+        utils->SetResolution(mLastMetrics.mResolution.scale,
+                             mLastMetrics.mResolution.scale);
+      }
 
       HandlePossibleViewportChange();
 
@@ -891,6 +894,9 @@ TabChildHelper::SetCSSViewport(const CSSSize& aSize)
 void
 TabChildHelper::HandlePossibleViewportChange()
 {
+  if (sDisableViewportHandler) {
+    return;
+  }
   nsCOMPtr<nsIDOMDocument> domDoc;
   mView->mWebNavigation->GetDocument(getter_AddRefs(domDoc));
   nsCOMPtr<nsIDocument> document(do_QueryInterface(domDoc));

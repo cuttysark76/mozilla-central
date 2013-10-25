@@ -728,6 +728,10 @@ void MediaDecoder::MetadataLoaded(int aChannels, int aRate, bool aHasAudio, bool
     return;
   }
 
+#ifdef HAS_NEMO_RESOURCE
+  NemoResourceHandler::MediaInfo(this, aHasAudio, aHasVideo);
+#endif
+
   {
     ReentrantMonitorAutoEnter mon(GetReentrantMonitor());
     if (mPlayState == PLAY_STATE_LOADING && mIsDormant && !mIsExitingDormant) {
