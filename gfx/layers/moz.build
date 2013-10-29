@@ -194,6 +194,7 @@ CPP_SOURCES += [
     'BasicLayerManager.cpp',
     'BasicLayersImpl.cpp',
     'BasicThebesLayer.cpp',
+    'BufferUnrotate.cpp',
     'CanvasClient.cpp',
     'CanvasLayerComposite.cpp',
     'CanvasLayerOGL.cpp',

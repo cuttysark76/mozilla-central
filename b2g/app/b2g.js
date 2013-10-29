@@ -361,6 +361,7 @@ pref("browser.dom.window.dump.enabled", false);
 
 // Default Content Security Policy to apply to privileged and certified apps
 pref("security.apps.privileged.CSP.default", "default-src *; script-src 'self'; object-src 'none'; style-src 'self' 'unsafe-inline'");
+// If you change this CSP, make sure to update the fast path in nsCSPService.cpp
 pref("security.apps.certified.CSP.default", "default-src *; script-src 'self'; object-src 'none'; style-src 'self'");
 
 // Temporarily force-enable GL compositing.  This is default-disabled
@@ -389,9 +390,6 @@ pref("dom.ipc.browser_frames.oop_by_default", false);
 
 // SMS/MMS
 pref("dom.sms.enabled", true);
-pref("dom.sms.strict7BitEncoding", false); // Disabled by default.
-pref("dom.sms.requestStatusReport", true); // Enabled by default.
-pref("dom.mms.requestStatusReport", true); // Enabled by default.
 
 // WebContacts
 pref("dom.mozContacts.enabled", true);
@@ -430,7 +428,6 @@ pref("services.push.udp.wakeupEnabled", true);
 // NetworkStats
 #ifdef MOZ_B2G_RIL
 pref("dom.mozNetworkStats.enabled", true);
-pref("ril.cellbroadcast.disabled", false);
 pref("dom.webapps.firstRunWithSIM", true);
 #endif
 
@@ -717,10 +714,6 @@ pref("font.size.inflation.disabledInMasterProcess", true);
 // consumption when applications are sent to the background.
 pref("memory.free_dirty_pages", true);
 
-// UAProfile settings
-pref("wap.UAProf.url", "");
-pref("wap.UAProf.tagname", "x-wap-profile");
-
 pref("layout.imagevisibility.enabled", false);
 pref("layout.imagevisibility.numscrollportwidths", 1);
 pref("layout.imagevisibility.numscrollportheights", 1);
@@ -743,7 +736,7 @@ pref("memory_info_dumper.watch_fifo.directory", "/data/local");
 pref("general.useragent.enable_overrides", true);
 // See ua-update.json.in for the packaged UA override list
 pref("general.useragent.updates.enabled", true);
-pref("general.useragent.updates.url", "");
+pref("general.useragent.updates.url", "https://dynamicua.cdn.mozilla.net/0/%APP_ID%");
 pref("general.useragent.updates.interval", 604800); // 1 week
 pref("general.useragent.updates.retry", 86400); // 1 day
 
@@ -804,5 +797,21 @@ pref("devtools.debugger.unix-domain-socket", "/data/local/debugger-socket");
 pref("gfx.canvas.azure.backends", "skia");
 pref("gfx.canvas.azure.accelerated", true);
 
+// enable fence with readpixels for SurfaceStream
+pref("gfx.gralloc.fence-with-readpixels", true);
+
 // Enable Telephony API
 pref("dom.telephony.enabled", true);
+
+// Cell Broadcast API
+pref("dom.cellbroadcast.enabled", true);
+pref("ril.cellbroadcast.disabled", false);
+
+// ICC API
+pref("dom.icc.enabled", true);
+
+// Mobile Connection API
+pref("dom.mobileconnection.enabled", true);
+
+// Voice Mail API
+pref("dom.voicemail.enabled", true);

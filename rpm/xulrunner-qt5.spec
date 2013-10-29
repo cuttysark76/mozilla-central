@@ -117,6 +117,7 @@ chmod +x %{buildroot}%{_libdir}/%{name}-%{greversion}/*.so
 # Use the system hunspell dictionaries
 %{__rm} -rf ${RPM_BUILD_ROOT}%{_libdir}/%{name}-%{greversion}/dictionaries
 ln -s %{_datadir}/myspell ${RPM_BUILD_ROOT}%{_libdir}/%{name}-%{greversion}/dictionaries
+mkdir ${RPM_BUILD_ROOT}%{_libdir}/%{name}-%{greversion}/defaults
 
 %post
 # >> post
@@ -126,6 +127,7 @@ touch /var/lib/_MOZEMBED_CACHE_CLEAN_
 %files
 %defattr(-,root,root,-)
 %attr(755,-,-) %{_bindir}/*
+%dir %{_libdir}/%{name}-%{greversion}/defaults
 %{_libdir}/%{name}-%{greversion}/*.so
 %{_libdir}/%{name}-%{greversion}/omni.ja
 %{_libdir}/%{name}-%{greversion}/dependentlibs.list

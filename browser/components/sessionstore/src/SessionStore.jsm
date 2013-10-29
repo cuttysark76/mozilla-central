@@ -160,8 +160,8 @@ this.SessionStore = {
     SessionStoreInternal.canRestoreLastSession = val;
   },
 
-  init: function ss_init(aWindow) {
-    SessionStoreInternal.init(aWindow);
+  init: function ss_init() {
+    SessionStoreInternal.init();
   },
 
   getBrowserState: function ss_getBrowserState() {
@@ -311,6 +311,9 @@ let SessionStoreInternal = {
   // states for all currently opened windows
   _windows: {},
 
+  // counter for creating unique window IDs
+  _nextWindowID: 0,
+
   // states for all recently closed windows
   _closedWindows: [],
 
@@ -347,6 +350,10 @@ let SessionStoreInternal = {
   // See bug 516755.
   _disabledForMultiProcess: false,
 
+  // Promise that is resolved when we're ready to initialize
+  // and restore the session.
+  _promiseReadyForInitialization: null,
+
   /**
    * A promise fulfilled once initialization is complete.
    */
@@ -369,13 +376,9 @@ let SessionStoreInternal = {
   /**
    * Initialize the sessionstore service.
    */
-  init: function (aWindow) {
+  init: function () {
     if (this._initialized) {
       throw new Error("SessionStore.init() must only be called once!");
-    }
-
-    if (!aWindow) {
-      throw new Error("SessionStore.init() must be called with a valid window.");
     }
 
     this._disabledForMultiProcess = Services.prefs.getBoolPref("browser.tabs.remote");
@@ -395,20 +398,6 @@ let SessionStoreInternal = {
     // this pref is only read at startup, so no need to observe it
     this._sessionhistory_max_entries =
       this._prefBranch.getIntPref("sessionhistory.max_entries");
-
-    // Wait until nsISessionStartup has finished reading the session data.
-    gSessionStartup.onceInitialized.then(() => {
-      // Parse session data and start restoring.
-      let initialState = this.initSession();
-
-      // Start tracking the given (initial) browser window.
-      if (!aWindow.closed) {
-        this.onLoad(aWindow, initialState);
-      }
-
-      // Let everyone know we're done.
-      this._deferredInitialized.resolve();
-    });
   },
 
   initSession: function ssi_initSession() {
@@ -494,7 +483,6 @@ let SessionStoreInternal = {
       this._prefBranch.setBoolPref("sessionstore.resume_session_once", false);
 
     this._performUpgradeBackup();
-    this._sessionInitialized = true;
 
     return state;
   },
@@ -691,6 +679,15 @@ let SessionStoreInternal = {
   },
 
   /**
+   * Generate a unique window identifier
+   * @return string
+   *         A unique string to identify a window
+   */
+  _generateWindowID: function ssi_generateWindowID() {
+    return "window" + (this._nextWindowID++);
+  },
+
+  /**
    * If it's the first window load since app start...
    * - determine if we're reloading after a crash or a forced-restart
    * - restore window state
@@ -706,13 +703,13 @@ let SessionStoreInternal = {
     if (aWindow && aWindow.__SSi && this._windows[aWindow.__SSi])
       return;
 
-    // ignore non-browser windows and windows opened while shutting down
-    if (aWindow.document.documentElement.getAttribute("windowtype") != "navigator:browser" ||
-        this._loadState == STATE_QUITTING)
+    // ignore windows opened while shutting down
+    if (this._loadState == STATE_QUITTING)
       return;
 
-    // assign it a unique identifier (timestamp)
-    aWindow.__SSi = "window" + Date.now();
+    // Assign the window a unique identifier we can use to reference
+    // internal data about the window.
+    aWindow.__SSi = this._generateWindowID();
 
     // and create its data object
     this._windows[aWindow.__SSi] = { tabs: [], selected: 0, _closedTabs: [], busy: false };
@@ -736,7 +733,7 @@ let SessionStoreInternal = {
           // We're starting with a single private window. Save the state we
           // actually wanted to restore so that we can do it later in case
           // the user opens another, non-private window.
-          this._deferredInitialState = aInitialState;
+          this._deferredInitialState = gSessionStartup.state;
 
           // Nothing to restore now, notify observers things are complete.
           Services.obs.notifyObservers(null, NOTIFY_WINDOWS_RESTORED, "");
@@ -871,7 +868,61 @@ let SessionStoreInternal = {
   onOpen: function ssi_onOpen(aWindow) {
     let onload = () => {
       aWindow.removeEventListener("load", onload);
-      this.onLoad(aWindow);
+
+      let windowType = aWindow.document.documentElement.getAttribute("windowtype");
+
+      // Ignore non-browser windows.
+      if (windowType != "navigator:browser") {
+        return;
+      }
+
+      if (this._sessionInitialized) {
+        this.onLoad(aWindow);
+        return;
+      }
+
+      // The very first window that is opened creates a promise that is then
+      // re-used by all subsequent windows. The promise will be used to tell
+      // when we're ready for initialization.
+      if (!this._promiseReadyForInitialization) {
+        let deferred = Promise.defer();
+
+        // Wait for the given window's delayed startup to be finished.
+        Services.obs.addObserver(function obs(subject, topic) {
+          if (aWindow == subject) {
+            Services.obs.removeObserver(obs, topic);
+            deferred.resolve();
+          }
+        }, "browser-delayed-startup-finished", false);
+
+        // We are ready for initialization as soon as the session file has been
+        // read from disk and the initial window's delayed startup has finished.
+        this._promiseReadyForInitialization =
+          Promise.all([deferred.promise, gSessionStartup.onceInitialized]);
+      }
+
+      // We can't call this.onLoad since initialization
+      // hasn't completed, so we'll wait until it is done.
+      // Even if additional windows are opened and wait
+      // for initialization as well, the first opened
+      // window should execute first, and this.onLoad
+      // will be called with the initialState.
+      this._promiseReadyForInitialization.then(() => {
+        if (aWindow.closed) {
+          return;
+        }
+
+        if (this._sessionInitialized) {
+          this.onLoad(aWindow);
+        } else {
+          let initialState = this.initSession();
+          this._sessionInitialized = true;
+          this.onLoad(aWindow, initialState);
+
+          // Let everyone know we're done.
+          this._deferredInitialized.resolve();
+        }
+      }, Cu.reportError);
     };
 
     aWindow.addEventListener("load", onload);
@@ -888,8 +939,10 @@ let SessionStoreInternal = {
     // this window was about to be restored - conserve its original data, if any
     let isFullyLoaded = this._isWindowLoaded(aWindow);
     if (!isFullyLoaded) {
-      if (!aWindow.__SSi)
-        aWindow.__SSi = "window" + Date.now();
+      if (!aWindow.__SSi) {
+        aWindow.__SSi = this._generateWindowID();
+      }
+
       this._windows[aWindow.__SSi] = this._statesToRestore[aWindow.__SS_restoreID];
       delete this._statesToRestore[aWindow.__SS_restoreID];
       delete aWindow.__SS_restoreID;
@@ -1359,6 +1412,9 @@ let SessionStoreInternal = {
 
     // Don't include the last session state in getBrowserState().
     delete state.lastSessionState;
+
+    // Don't include any deferred initial state.
+    delete state.deferredInitialState;
 
     return this._toJSONString(state);
   },
@@ -2465,6 +2521,13 @@ let SessionStoreInternal = {
     // Persist the last session if we deferred restoring it
     if (this._lastSessionState) {
       state.lastSessionState = this._lastSessionState;
+    }
+
+    // If we were called by the SessionSaver and started with only a private
+    // window we want to pass the deferred initial state to not lose the
+    // previous session.
+    if (this._deferredInitialState) {
+      state.deferredInitialState = this._deferredInitialState;
     }
 
     return state;
@@ -3923,6 +3986,14 @@ let SessionStoreInternal = {
    * @returns [defaultState, state]
    */
   _prepDataForDeferredRestore: function ssi_prepDataForDeferredRestore(state) {
+    // Make sure that we don't modify the global state as provided by
+    // nsSessionStartup.state. Converting the object to a JSON string and
+    // parsing it again is the easiest way to do that, although not the most
+    // efficient one. Deferred sessions that don't have automatic session
+    // restore enabled tend to be a lot smaller though so that this shouldn't
+    // be a big perf hit.
+    state = JSON.parse(JSON.stringify(state));
+
     let defaultState = { windows: [], selectedWindow: 1 };
 
     state.selectedWindow = state.selectedWindow || 1;

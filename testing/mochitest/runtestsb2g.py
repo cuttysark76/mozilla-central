@@ -146,7 +146,9 @@ class B2GMochitest(MochitestUtilsMixin):
             log.error("Automation Error: Received unexpected exception while running application\n")
             status = 1
 
+        sys.stdout.flush()
         time.sleep(5)
+        sys.stdout.flush()
         self.stopWebServer(options)
         self.stopWebSocketServer(options)
 

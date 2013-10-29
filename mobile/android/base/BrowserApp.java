@@ -52,6 +52,7 @@ import android.nfc.NfcAdapter;
 import android.nfc.NfcEvent;
 import android.os.Build;
 import android.os.Bundle;
+import android.support.v4.app.FragmentManager;
 import android.text.TextUtils;
 import android.util.Log;
 import android.view.InputDevice;
@@ -479,7 +480,7 @@ abstract public class BrowserApp extends GeckoApp
         registerEventListener("Updater:Launch");
         registerEventListener("Reader:GoToReadingList");
 
-        Distribution.init(this, getPackageResourcePath());
+        Distribution.init(this);
         JavaAddonManager.getInstance().init(getApplicationContext());
         mSharedPreferencesHelper = new SharedPreferencesHelper(getApplicationContext());
         mOrderedBroadcastHelper = new OrderedBroadcastHelper(getApplicationContext());
@@ -1584,8 +1585,16 @@ abstract public class BrowserApp extends GeckoApp
 
         mBrowserSearchContainer.setVisibility(View.VISIBLE);
 
-        getSupportFragmentManager().beginTransaction()
-                .add(R.id.search_container, mBrowserSearch, BROWSER_SEARCH_TAG).commitAllowingStateLoss();
+        final FragmentManager fm = getSupportFragmentManager();
+
+        // In certain situations, showBrowserSearch() can be called immediately after hideBrowserSearch()
+        // (see bug 925012). Because of an Android bug (http://code.google.com/p/android/issues/detail?id=61179),
+        // calling FragmentTransaction#add immediately after FragmentTransaction#remove won't add the fragment's
+        // view to the layout. Calling FragmentManager#executePendingTransactions before re-adding the fragment
+        // prevents this issue.
+        fm.executePendingTransactions();
+
+        fm.beginTransaction().add(R.id.search_container, mBrowserSearch, BROWSER_SEARCH_TAG).commitAllowingStateLoss();
         mBrowserSearch.setUserVisibleHint(true);
     }
 
@@ -2259,8 +2268,12 @@ abstract public class BrowserApp extends GeckoApp
     // HomePager.OnNewTabsListener
     @Override
     public void onNewTabs(String[] urls) {
+        final EnumSet<OnUrlOpenListener.Flags> flags = EnumSet.of(OnUrlOpenListener.Flags.ALLOW_SWITCH_TO_TAB);
+ 
         for (String url : urls) {
-            openUrl(url, true);
+            if (!maybeSwitchToTab(url, flags)) {
+                openUrl(url, true);
+            }
         }
     }
 

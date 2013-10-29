@@ -1323,6 +1323,17 @@ ContentParent::ContentParent(mozIApplication* aApp,
         }
     }
 
+#ifdef MOZ_CONTENT_SANDBOX
+    // Bug 921817.  We enable the sandbox in RecvSetProcessPrivileges,
+    // which is where a preallocated process drops unnecessary privileges,
+    // but a non-preallocated process will already have changed its
+    // uid/gid/etc immediately after forking.  Thus, we send this message,
+    // which is otherwise a no-op, to sandbox it at an appropriate point
+    // during startup.
+    if (aOSPrivileges != base::PRIVILEGES_INHERIT) {
+        SendSetProcessPrivileges(base::PRIVILEGES_INHERIT);
+    }
+#endif
 }
 
 ContentParent::~ContentParent()
@@ -1664,18 +1675,6 @@ ContentParent::RecvBroadcastVolume(const nsString& aVolumeName)
     NS_WARNING("ContentParent::RecvBroadcastVolume shouldn't be called when MOZ_WIDGET_GONK is not defined");
     return false;
 #endif
-}
-
-bool
-ContentParent::RecvRecordingDeviceEvents(const nsString& aRecordingStatus)
-{
-    nsCOMPtr<nsIObserverService> obs = mozilla::services::GetObserverService();
-    if (obs) {
-        obs->NotifyObservers(nullptr, "recording-device-events", aRecordingStatus.get());
-    } else {
-        NS_WARNING("Could not get the Observer service for ContentParent::RecvRecordingDeviceEvents.");
-    }
-    return true;
 }
 
 NS_IMPL_ISUPPORTS3(ContentParent,
