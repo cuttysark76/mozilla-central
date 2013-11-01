@@ -288,13 +288,18 @@ VideoData* VideoData::Create(VideoInfo& aInfo,
 VideoData* VideoData::Create(VideoInfo& aInfo,
                              ImageContainer* aContainer,
                              void* aMagicHandle,
-                             nsIntRect aPicture)
+                             nsIntRect aPicture,
+                             int64_t aOffset,
+                             int64_t aTime,
+                             int64_t aEndTime,
+                             bool aKeyframe,
+                             int64_t aTimecode)
 {
-  nsAutoPtr<VideoData> v(new VideoData(-1,
-                                       0,
-                                       160,
-                                       true,
-                                       -1,
+  nsAutoPtr<VideoData> v(new VideoData(aOffset,
+                                       aTime,
+                                       aEndTime,
+                                       aKeyframe,
+                                       aTimecode,
                                        aInfo.mDisplay));
 
   ImageFormat format = SHARED_TEXTURE;
