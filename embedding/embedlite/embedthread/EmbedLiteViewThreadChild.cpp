@@ -730,8 +730,19 @@ EmbedLiteViewThreadChild::RecvHandleKeyPressEvent(const int& domKeyCode, const i
   NS_ENSURE_TRUE(utils, true);
   bool handled = false;
   // If the key isn't autorepeat, we need to send the initial down event
-  utils->SendKeyEvent(NS_LITERAL_STRING("keydown"), domKeyCode, charCode, gmodifiers, 0, &handled);
-  utils->SendKeyEvent(NS_LITERAL_STRING("keypress"), domKeyCode, charCode, gmodifiers, 0, &handled);
+  utils->SendKeyEvent(NS_LITERAL_STRING("keydown"), domKeyCode, 0, gmodifiers, 0, &handled);
+  // Don't pass modifiers as NS_KEY_PRESS events.
+  // Instead of selectively excluding some keys from NS_KEY_PRESS events,
+  // we instead selectively include (as per MSDN spec
+  // ( http://msdn.microsoft.com/en-us/library/system.windows.forms.control.keypress%28VS.71%29.aspx );
+  // no official spec covers KeyPress events).
+  if (domKeyCode != nsIDOMKeyEvent::DOM_VK_SHIFT &&
+      domKeyCode != nsIDOMKeyEvent::DOM_VK_META &&
+      domKeyCode != nsIDOMKeyEvent::DOM_VK_CONTROL &&
+      domKeyCode != nsIDOMKeyEvent::DOM_VK_ALT)
+  {
+    utils->SendKeyEvent(NS_LITERAL_STRING("keypress"), domKeyCode, charCode, gmodifiers, 0, &handled);
+  }
   return true;
 }
 
@@ -742,7 +753,7 @@ EmbedLiteViewThreadChild::RecvHandleKeyReleaseEvent(const int& domKeyCode, const
   nsCOMPtr<nsIDOMWindowUtils> utils = do_GetInterface(window);
   NS_ENSURE_TRUE(utils, true);
   bool handled = false;
-  utils->SendKeyEvent(NS_LITERAL_STRING("keyup"), domKeyCode, charCode, gmodifiers, 0, &handled);
+  utils->SendKeyEvent(NS_LITERAL_STRING("keyup"), domKeyCode, 0, gmodifiers, 0, &handled);
   return true;
 }
 

@@ -140,18 +140,22 @@ nsresult GStreamerReader::Init(MediaDecoderReader* aCloneDonor)
     return NS_ERROR_FAILURE;
   }
 #ifdef HAS_NEMO_INTERFACE
-  if (sDroidEGLSinkInUse && !Preferences::GetBool("gstreamer.no_hw_decoder_limit", false))
+  static bool sDisableNemoIface = getenv("NO_GST_NEMO") != 0;
+  if (!sDisableNemoIface)
   {
-    LOG(PR_LOG_ERROR, ("couldn't start droideglsink because it busy"));
-    return NS_ERROR_FAILURE;
+    if (sDroidEGLSinkInUse && !Preferences::GetBool("gstreamer.no_hw_decoder_limit", false))
+    {
+      LOG(PR_LOG_ERROR, ("couldn't start droideglsink because it busy"));
+      return NS_ERROR_FAILURE;
+    }
+    mPlaySink = gst_element_factory_make("droideglsink", nullptr);
+    if (!mPlaySink) {
+      LOG(PR_LOG_DEBUG, ("could not create egl sink: %p", mPlaySink));
+      return NS_ERROR_FAILURE;
+    }
+    sDroidEGLSinkInUse++;
+    mDroidEGLSinkInUse = true;
   }
-  mPlaySink = gst_element_factory_make("droideglsink", nullptr);
-  if (!mPlaySink) {
-    LOG(PR_LOG_DEBUG, ("could not create egl sink: %p", mPlaySink));
-    return NS_ERROR_FAILURE;
-  }
-  sDroidEGLSinkInUse++;
-  mDroidEGLSinkInUse = true;
 #endif
   g_object_set(mPlayBin, "buffer-size", 0, nullptr);
   mBus = gst_pipeline_get_bus(GST_PIPELINE(mPlayBin));
@@ -593,6 +597,16 @@ bool GStreamerReader::DecodeVideoFrame(bool &aKeyFrameSkip,
         return false;
       }
 
+      if (mVideoQueue.GetSize() > 0)
+      {
+        mon.Wait();
+      }
+
+      if (mVideoQueue.GetSize() > 0)
+      {
+        return true;
+      }
+
       NotifyBytesConsumed();
       mDecoder->NotifyDecodedFrames(0, 1);
     }
@@ -606,9 +620,9 @@ bool GStreamerReader::DecodeVideoFrame(bool &aKeyFrameSkip,
     NS_ASSERTION(resource, "Decoder has no media resource");
 
     int64_t offset = 0; // mDecoder->GetResource()->Tell(); Estimate location in media. ?
-    int64_t timestamp = 0; // GST_SYNC_TIMESTAMP(mPlaySink);
-    int64_t endTime = 1; // timestamp + GST_SYNC_DURATION(mPlaySink);
-    bool isKeyframe = true; // !GST_SYNC_FLAG_IS_SET(mPlaySink, GST_SYNC_FLAG_DISCONT);
+    int64_t timestamp = aTimeThreshold; // GST_SYNC_TIMESTAMP(mPlaySink);
+    int64_t endTime = timestamp + 1; // timestamp + GST_SYNC_DURATION(mPlaySink);
+    bool isKeyframe = false; // !GST_SYNC_FLAG_IS_SET(mPlaySink, GST_SYNC_FLAG_DISCONT);
     int64_t timecode = -1; //
 #ifdef HAS_NEMO_INTERFACE
     NemoGstVideoTextureFrameInfo info;
@@ -1115,7 +1129,10 @@ void GStreamerReader::PlaySinkFrameSetupCb(GstElement* aPlaySink,
 
 void GStreamerReader::PlaySinkFrameSetup(gint aFrame)
 {
-  NewVideoBuffer();
+  if (mVideoQueue.GetSize() == 0)
+  {
+    NewVideoBuffer();
+  }
 }
 
 GstFlowReturn GStreamerReader::NewBufferCb(GstAppSink* aSink,
