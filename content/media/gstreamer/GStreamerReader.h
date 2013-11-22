@@ -62,6 +62,8 @@ public:
 
   virtual void Play();
   virtual void Pause();
+  virtual void Suspend();
+  virtual void Resume(bool aForceBuffering);
 
 private:
 
@@ -179,7 +181,6 @@ private:
   int fpsDen;
   GstElement* mPlaySink;
   bool mPlayingStartedOnce;
-  bool mDroidEGLSinkInUse;
 };
 
 } // namespace mozilla

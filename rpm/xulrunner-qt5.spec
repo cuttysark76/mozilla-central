@@ -36,6 +36,9 @@ BuildRequires:  zip
 BuildRequires:  unzip
 BuildRequires:  hunspell-devel
 BuildRequires:  libjpeg-turbo-devel
+%ifarch armv7hl
+Requires: gstreamer0.10-colorconv
+%endif
 %ifarch i586 i486 i386
 BuildRequires:  yasm
 %endif

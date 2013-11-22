@@ -15,6 +15,7 @@
 #include "mozilla/Services.h"
 #include "nsIObserverService.h"
 #include "nsStringGlue.h"
+#include "mozilla/Preferences.h"
 
 using namespace ResourcePolicy;
 
@@ -26,13 +27,6 @@ void
 NemoResourceHandler::AquireResources(void* aHolder)
 {
     MOZ_ASSERT(NS_IsMainThread());
-    if (mGlobalHandler == nullptr)
-    {
-        mGlobalHandler = new NemoResourceHandler();
-    }
-
-    mGlobalHandler->Aquire();
-
     nsCOMPtr<nsIObserverService> obs =
         mozilla::services::GetObserverService();
     if (obs) {
@@ -40,18 +34,23 @@ NemoResourceHandler::AquireResources(void* aHolder)
         data.AppendPrintf("{ \"owner\" : \"%p\", \"state\": \"play\" }", aHolder);
         obs->NotifyObservers(nullptr, "media-decoder-info", data.get());
     }
+
+    if (Preferences::GetBool("media.resource_handler_disabled", false) == true) {
+        return;
+    }
+
+    if (mGlobalHandler == nullptr)
+    {
+        mGlobalHandler = new NemoResourceHandler();
+    }
+
+    mGlobalHandler->Aquire();
 }
 
 void
 NemoResourceHandler::ReleaseResources(void* aHolder)
 {
     MOZ_ASSERT(NS_IsMainThread());
-    if (!mGlobalHandler) {
-        return;
-    }
-
-    mGlobalHandler->Release();
-
     nsCOMPtr<nsIObserverService> obs =
         mozilla::services::GetObserverService();
     if (obs) {
@@ -59,6 +58,16 @@ NemoResourceHandler::ReleaseResources(void* aHolder)
         data.AppendPrintf("{ \"owner\" : \"%p\", \"state\": \"pause\" }", aHolder);
         obs->NotifyObservers(nullptr, "media-decoder-info", data.get());
     }
+
+    if (Preferences::GetBool("media.resource_handler_disabled", false) == true) {
+        return;
+    }
+
+    if (!mGlobalHandler) {
+        return;
+    }
+
+    mGlobalHandler->Release();
 
     if (mGlobalHandler->CanDestroy())
     {
@@ -84,8 +93,7 @@ void
 NemoResourceHandler::Aquire()
 {
     mCounter++;
-    if (mCounter > 0 && !mResourceSet)
-    {
+    if (mCounter > 0 && !mResourceSet) {
         ResourceSet* set = new ResourcePolicy::ResourceSet("player");
         ResourcePolicy::AudioResource *audioResource = new ResourcePolicy::AudioResource("player");
         audioResource->setProcessID(QCoreApplication::applicationPid());
@@ -101,8 +109,7 @@ void
 NemoResourceHandler::Release()
 {
     mCounter--;
-    if (mCounter == 0 && mResourceSet)
-    {
+    if (mCounter == 0 && mResourceSet) {
         delete static_cast<ResourceSet*>(mResourceSet);
         mResourceSet = nullptr;
     }

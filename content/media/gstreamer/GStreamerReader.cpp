@@ -58,7 +58,30 @@ typedef enum {
   GST_PLAY_FLAG_SOFT_COLORBALANCE = (1 << 10)
 } PlayFlags;
 
-static int sDroidEGLSinkInUse = 0;
+void* sCurrentDecoderUser = nullptr;
+static bool sNoLimitOneGSTDecoder = getenv("NO_LIMIT_ONE_GST_DECODER") != 0;
+
+void ResetIfCurrentDecoderActive(void* aCaller)
+{
+#ifdef HAS_NEMO_INTERFACE
+  if (!sNoLimitOneGSTDecoder && sCurrentDecoderUser == aCaller) {
+    sCurrentDecoderUser = nullptr;
+  }
+#endif
+}
+
+bool UpdateCurrentAsActiveIfNotBusy(void* aCaller)
+{
+#ifdef HAS_NEMO_INTERFACE
+  if (!sNoLimitOneGSTDecoder && sCurrentDecoderUser != nullptr && sCurrentDecoderUser != aCaller)
+  {
+    return false;
+  }
+  sCurrentDecoderUser = aCaller;
+#endif
+  return true;
+}
+
 
 GStreamerReader::GStreamerReader(AbstractMediaDecoder* aDecoder)
   : MediaDecoderReader(aDecoder),
@@ -79,8 +102,7 @@ GStreamerReader::GStreamerReader(AbstractMediaDecoder* aDecoder)
   fpsNum(0),
   fpsDen(0),
   mPlaySink(nullptr),
-  mPlayingStartedOnce(false),
-  mDroidEGLSinkInUse(false)
+  mPlayingStartedOnce(false)
 {
   MOZ_COUNT_CTOR(GStreamerReader);
 
@@ -102,6 +124,7 @@ GStreamerReader::~GStreamerReader()
   MOZ_COUNT_DTOR(GStreamerReader);
   ResetDecode();
 
+  ResetIfCurrentDecoderActive(this);
   if (mPlayBin) {
     gst_app_src_end_of_stream(mSource);
     if (mSource)
@@ -111,11 +134,6 @@ GStreamerReader::~GStreamerReader()
     mPlayingStartedOnce = false;
     mPlayBin = nullptr;
     mPlaySink = nullptr;
-    if (mDroidEGLSinkInUse)
-    {
-      sDroidEGLSinkInUse--;
-      mDroidEGLSinkInUse = false;
-    }
     mVideoSink = nullptr;
     mVideoAppSink = nullptr;
     mAudioSink = nullptr;
@@ -140,27 +158,29 @@ nsresult GStreamerReader::Init(MediaDecoderReader* aCloneDonor)
     return NS_ERROR_FAILURE;
   }
 #ifdef HAS_NEMO_INTERFACE
-  static bool sDisableNemoIface = getenv("NO_GST_NEMO") != 0;
-  if (!sDisableNemoIface)
+  static bool sEnableNemoIface = getenv("DROID_SINK") != 0;
+  if (sEnableNemoIface)
   {
-    if (sDroidEGLSinkInUse && !Preferences::GetBool("gstreamer.no_hw_decoder_limit", false))
-    {
-      LOG(PR_LOG_ERROR, ("couldn't start droideglsink because it busy"));
+    static bool sBlockGstIfDecoderBusy = getenv("BLOCK_GST_INIT_IF_BUSY") != 0;
+    if (sBlockGstIfDecoderBusy && sCurrentDecoderUser != nullptr && sCurrentDecoderUser != this) {
       return NS_ERROR_FAILURE;
     }
+
     mPlaySink = gst_element_factory_make("droideglsink", nullptr);
     if (!mPlaySink) {
       LOG(PR_LOG_DEBUG, ("could not create egl sink: %p", mPlaySink));
       return NS_ERROR_FAILURE;
     }
-    sDroidEGLSinkInUse++;
-    mDroidEGLSinkInUse = true;
   }
 #endif
   g_object_set(mPlayBin, "buffer-size", 0, nullptr);
   mBus = gst_pipeline_get_bus(GST_PIPELINE(mPlayBin));
 
+#ifndef HAS_NEMO_INTERFACE
   mVideoSink = gst_parse_bin_from_description("capsfilter name=filter ! "
+#else
+  mVideoSink = gst_parse_bin_from_description("colorconv ! capsfilter name=filter ! "
+#endif
       "appsink name=videosink sync=true max-buffers=1 "
       "caps=video/x-raw-yuv,format=(fourcc)I420"
       , TRUE, nullptr);
@@ -225,15 +245,32 @@ nsresult GStreamerReader::Init(MediaDecoderReader* aCloneDonor)
 void GStreamerReader::Play()
 {
   if (mPlaySink && mPlayBin && mPlayingStartedOnce) {
-    gst_element_set_state(mPlayBin, GST_STATE_PLAYING);
+    if (UpdateCurrentAsActiveIfNotBusy(this)) {
+      gst_element_set_state(mPlayBin, GST_STATE_PLAYING);
+    }
   }
 }
 
 void GStreamerReader::Pause()
 {
   if (mPlaySink && mPlayBin && mPlayingStartedOnce) {
-    gst_element_set_state(mPlayBin, GST_STATE_PAUSED);
+    if (UpdateCurrentAsActiveIfNotBusy(this)) {
+      gst_element_set_state(mPlayBin, GST_STATE_PAUSED);
+    }
   }
+}
+
+void GStreamerReader::Suspend()
+{
+  if (mPlaySink && mPlayBin && mPlayingStartedOnce) {
+    gst_element_set_state(mPlayBin, GST_STATE_NULL);
+    ResetIfCurrentDecoderActive(this);
+    mPlayingStartedOnce = false;
+  }
+}
+
+void GStreamerReader::Resume(bool aForceBuffering)
+{
 }
 
 GstBusSyncReply
@@ -351,7 +388,9 @@ nsresult GStreamerReader::ReadMetadata(VideoInfo* aInfo,
     }
 
     /* start the pipeline */
-    gst_element_set_state(mPlayBin, GST_STATE_PAUSED);
+    if (UpdateCurrentAsActiveIfNotBusy(this)) {
+      gst_element_set_state(mPlayBin, GST_STATE_PAUSED);
+    }
 
     /* Wait for ASYNC_DONE, which is emitted when the pipeline is built,
      * prerolled and ready to play. Also watch for errors.
@@ -368,6 +407,7 @@ nsresult GStreamerReader::ReadMetadata(VideoInfo* aInfo,
       g_error_free(error);
       g_free(debug);
       gst_element_set_state(mPlayBin, GST_STATE_NULL);
+      ResetIfCurrentDecoderActive(this);
       gst_message_unref(message);
       mPlayingStartedOnce = false;
       ret = NS_ERROR_FAILURE;
@@ -387,13 +427,14 @@ nsresult GStreamerReader::ReadMetadata(VideoInfo* aInfo,
 
   /* FIXME: workaround for a bug in matroskademux. This seek makes matroskademux
    * parse the index */
-  if (gst_element_seek_simple(mPlayBin, GST_FORMAT_TIME,
+  if (!mPlaySink && gst_element_seek_simple(mPlayBin, GST_FORMAT_TIME,
         GST_SEEK_FLAG_FLUSH, 0)) {
     /* after a seek we need to wait again for ASYNC_DONE */
     message = gst_bus_timed_pop_filtered(mBus, GST_CLOCK_TIME_NONE,
        (GstMessageType)(GST_MESSAGE_ASYNC_DONE | GST_MESSAGE_ERROR));
     if (GST_MESSAGE_TYPE(message) == GST_MESSAGE_ERROR) {
       gst_element_set_state(mPlayBin, GST_STATE_NULL);
+      ResetIfCurrentDecoderActive(this);
       mPlayingStartedOnce = false;
       gst_message_unref(message);
       return NS_ERROR_FAILURE;
@@ -428,8 +469,10 @@ nsresult GStreamerReader::ReadMetadata(VideoInfo* aInfo,
 
   /* set the pipeline to PLAYING so that it starts decoding and queueing data in
    * the appsinks */
-  gst_element_set_state(mPlayBin, GST_STATE_PLAYING);
-  mPlayingStartedOnce = true;
+  if (UpdateCurrentAsActiveIfNotBusy(this)) {
+    mPlayingStartedOnce = true;
+    gst_element_set_state(mPlayBin, GST_STATE_PLAYING);
+  }
 
   return NS_OK;
 }
@@ -502,11 +545,6 @@ nsresult GStreamerReader::ResetDecode()
   mReachedEos = false;
   mLastReportedByteOffset = 0;
   mByteOffset = 0;
-  if (mDroidEGLSinkInUse)
-  {
-    sDroidEGLSinkInUse--;
-    mDroidEGLSinkInUse = false;
-  }
 
   return res;
 }

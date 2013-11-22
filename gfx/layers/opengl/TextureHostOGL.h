@@ -255,6 +255,8 @@ public:
                          gfx::IntSize aSize,
                          const gfx3DMatrix& aTexTransform);
 
+  virtual ~SharedTextureSourceOGL();
+
   virtual TextureSourceOGL* AsSourceOGL() { return this; }
 
   virtual void BindTexture(GLenum activetex) MOZ_OVERRIDE;

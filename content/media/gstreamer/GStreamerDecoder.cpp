@@ -47,6 +47,24 @@ void GStreamerDecoder::Pause()
   MediaDecoder::Pause();
 }
 
+void GStreamerDecoder::Suspend()
+{
+  if (mReader) {
+    mReader->Suspend();
+  }
+
+  MediaDecoder::Suspend();
+}
+
+void GStreamerDecoder::Resume(bool aForceBuffering)
+{
+  if (mReader) {
+    mReader->Resume(aForceBuffering);
+  }
+
+  MediaDecoder::Resume(aForceBuffering);
+}
+
 bool
 GStreamerDecoder::CanHandleMediaType(const nsACString& aMIMEType,
                                      const nsAString* aCodecs)

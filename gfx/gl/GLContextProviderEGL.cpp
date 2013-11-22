@@ -813,7 +813,7 @@ public:
 
     virtual ~GstVideoSyncWrapper()
     {
-        mPlaySink = nullptr;
+        ResetPlaySink();
     }
 
     void ResetPlaySink() { mPlaySink = nullptr; }
@@ -962,6 +962,14 @@ GLContextEGL::CreateSharedHandle(SharedTextureShareType shareType,
 
         return (SharedTextureHandle) new SurfaceTextureWrapper(reinterpret_cast<nsSurfaceTexture*>(buffer));
 #endif
+#ifdef HAS_NEMO_INTERFACE
+    case SharedHandleType_GstreamerMagicHandle: {
+        GstVideoSyncWrapper* wrap = new GstVideoSyncWrapper(static_cast<GstElement*>(buffer));
+        g_object_set(G_OBJECT(buffer), "egl-display", EGL_DISPLAY(), NULL);
+        return (SharedTextureHandle)wrap;
+    }
+#endif
+
     case SharedTextureBufferType::TextureID: {
         if (!mShareWithEGLImage)
             return 0;
@@ -998,7 +1006,11 @@ void GLContextEGL::ReleaseSharedHandle(SharedTextureShareType shareType,
         delete wrapper;
         break;
 #endif
-    
+    case SharedHandleType_GstreamerMagicHandle: {
+        GstVideoSyncWrapper* gstwrapper = reinterpret_cast<GstVideoSyncWrapper*>(wrapper);
+        delete gstwrapper;
+        break;
+    }
     case SharedHandleType_Image: {
         NS_ASSERTION(mShareWithEGLImage, "EGLImage not supported or disabled in runtime");
 
@@ -1094,7 +1106,6 @@ bool GLContextEGL::AttachSharedHandle(SharedTextureShareType shareType,
         GstVideoSyncWrapper* gstwrapper = reinterpret_cast<GstVideoSyncWrapper*>(sharedHandle);
         void* objSink = gstwrapper->PlaySink();
         if (objSink) {
-            g_object_set(G_OBJECT(objSink), "egl-display", EGL_DISPLAY(), NULL);
             NemoGstVideoTexture *sink = NEMO_GST_VIDEO_TEXTURE(objSink);
             if (!nemo_gst_video_texture_acquire_frame(sink)) {
                 gstwrapper->ResetPlaySink();
@@ -2131,6 +2142,7 @@ GLContextProviderEGL::CreateSharedHandle(SharedTextureShareType shareType,
       bufferType == gl::GstreamerMagicHandle) {
 
     GstVideoSyncWrapper* wrap = new GstVideoSyncWrapper(static_cast<GstElement*>(buffer));
+    g_object_set(G_OBJECT(buffer), "egl-display", EGL_DISPLAY(), NULL);
     return (SharedTextureHandle)wrap;
   }
 #endif

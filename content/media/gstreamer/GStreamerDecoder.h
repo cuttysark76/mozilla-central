@@ -25,6 +25,8 @@ public:
   virtual void ReleaseStateMachine();
   virtual nsresult Play();
   virtual void Pause();
+  void Suspend() MOZ_OVERRIDE;
+  void Resume(bool aForceBuffering) MOZ_OVERRIDE;
 private:
   GStreamerReader* mReader;
 };
