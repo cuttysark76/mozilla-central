@@ -1,0 +1,113 @@
+From f80e8cbc9626ac32be91e874cbfbc6afd5c20af7 Mon Sep 17 00:00:00 2001
+From: Mohammed Hassan <mohammed.hassan@jolla.com>
+Date: Mon, 25 Nov 2013 15:31:13 +0200
+Subject: [PATCH] Disable x11 bits
+
+---
+ .../webrtc/modules/audio_device/linux/audio_device_alsa_linux.cc    | 4 +++-
+ .../webrtc/modules/audio_device/linux/audio_device_alsa_linux.h     | 5 ++++-
+ .../webrtc/modules/audio_device/linux/audio_device_pulse_linux.cc   | 6 +++++-
+ .../webrtc/modules/audio_device/linux/audio_device_pulse_linux.h    | 4 ++++
+ 4 files changed, 16 insertions(+), 3 deletions(-)
+
+diff --git a/media/webrtc/trunk/webrtc/modules/audio_device/linux/audio_device_alsa_linux.cc b/media/webrtc/trunk/webrtc/modules/audio_device/linux/audio_device_alsa_linux.cc
+index 7034eaa..520e1ce 100644
+--- a/media/webrtc/trunk/webrtc/modules/audio_device/linux/audio_device_alsa_linux.cc
++++ b/media/webrtc/trunk/webrtc/modules/audio_device/linux/audio_device_alsa_linux.cc
+@@ -2360,12 +2360,14 @@ bool AudioDeviceLinuxALSA::KeyPressed() const{
+   unsigned int i = 0;
+   char state = 0;
+ 
++#ifdef MOZ_X11
+   if (!_XDisplay)
+     return false;
+ 
+-#ifdef MOZ_X11
+   // Check key map status
+   XQueryKeymap(_XDisplay, szKey);
++#else
++    return false;
+ #endif
+ 
+   // A bit change in keymap means a key is pressed
+diff --git a/media/webrtc/trunk/webrtc/modules/audio_device/linux/audio_device_alsa_linux.h b/media/webrtc/trunk/webrtc/modules/audio_device/linux/audio_device_alsa_linux.h
+index dbe737e..ac20821 100644
+--- a/media/webrtc/trunk/webrtc/modules/audio_device/linux/audio_device_alsa_linux.h
++++ b/media/webrtc/trunk/webrtc/modules/audio_device/linux/audio_device_alsa_linux.h
+@@ -19,8 +19,9 @@
+ #include <alsa/asoundlib.h>
+ #include <sys/soundcard.h>
+ #include <sys/ioctl.h>
++#ifdef MOZ_X11
+ #include <X11/Xlib.h>
+-
++#endif
+ 
+ namespace webrtc
+ {
+@@ -251,7 +252,9 @@ private:
+     uint16_t _playBufDelayFixed;            // fixed playback delay
+ 
+     char _oldKeyState[32];
++#ifdef MOZ_X11
+     Display* _XDisplay;
++#endif
+ };
+ 
+ }
+diff --git a/media/webrtc/trunk/webrtc/modules/audio_device/linux/audio_device_pulse_linux.cc b/media/webrtc/trunk/webrtc/modules/audio_device/linux/audio_device_pulse_linux.cc
+index 2146319..0028696 100644
+--- a/media/webrtc/trunk/webrtc/modules/audio_device/linux/audio_device_pulse_linux.cc
++++ b/media/webrtc/trunk/webrtc/modules/audio_device/linux/audio_device_pulse_linux.cc
+@@ -230,7 +230,7 @@ int32_t AudioDeviceLinuxPulse::Init()
+     _playError = 0;
+     _recWarning = 0;
+     _recError = 0;
+-
++#ifdef MOZ_X11
+     //Get X display handle for typing detection
+     _XDisplay = XOpenDisplay(NULL);
+     if (!_XDisplay)
+@@ -3117,11 +3117,15 @@ bool AudioDeviceLinuxPulse::KeyPressed() const{
+   unsigned int i = 0;
+   char state = 0;
+ 
++#ifdef MOZ_X11
+   if (!_XDisplay)
+     return false;
+ 
+   // Check key map status
+   XQueryKeymap(_XDisplay, szKey);
++#else
++    return false;
++#endif
+ 
+   // A bit change in keymap means a key is pressed
+   for (i = 0; i < sizeof(szKey); i++)
+diff --git a/media/webrtc/trunk/webrtc/modules/audio_device/linux/audio_device_pulse_linux.h b/media/webrtc/trunk/webrtc/modules/audio_device/linux/audio_device_pulse_linux.h
+index 3b8a181..951f46f 100644
+--- a/media/webrtc/trunk/webrtc/modules/audio_device/linux/audio_device_pulse_linux.h
++++ b/media/webrtc/trunk/webrtc/modules/audio_device/linux/audio_device_pulse_linux.h
+@@ -16,7 +16,9 @@
+ #include "critical_section_wrapper.h"
+ 
+ #include <pulse/pulseaudio.h>
++#ifdef MOZ_X11
+ #include <X11/Xlib.h>
++#endif
+ 
+ // We define this flag if it's missing from our headers, because we want to be
+ // able to compile against old headers but still use PA_STREAM_ADJUST_LATENCY
+@@ -380,7 +382,9 @@ private:
+     pa_buffer_attr _recBufferAttr;
+ 
+     char _oldKeyState[32];
++#ifdef MOZ_X11
+     Display* _XDisplay;
++#endif
+ };
+ 
+ }
+-- 
+1.8.4.rc3
+
