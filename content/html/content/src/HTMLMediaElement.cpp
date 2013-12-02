@@ -2802,7 +2802,7 @@ void HTMLMediaElement::FirstFrameLoaded(bool aResourceFullyLoaded)
       !HasAttr(kNameSpaceID_None, nsGkAtoms::autoplay) &&
       mPreloadAction == HTMLMediaElement::PRELOAD_METADATA) {
     mSuspendedAfterFirstFrame = true;
-#ifdef HAS_NEMO_INTERFACE
+#ifdef HAS_NEMO_RESOURCE
     static bool doSuspendOnFirstFrame = getenv("DO_SUSPEND_ON_FIRST_FRAME") != 0;
     if (doSuspendOnFirstFrame)
 #endif

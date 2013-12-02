@@ -1110,7 +1110,6 @@ gst/gst.h
 gst/app/gstappsink.h
 gst/app/gstappsrc.h
 gst/video/video.h
-gst/interfaces/nemovideotexture.h
 resource/qt5/policy/audio-resource.h
 resource/qt5/policy/resource-set.h
 resource/qt5/policy/resource.h

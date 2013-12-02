@@ -11,9 +11,6 @@
 #include "AbstractMediaDecoder.h"
 #include "VideoUtils.h"
 #include "ImageContainer.h"
-#include "SharedTextureImage.h"
-#include "GLContext.h"
-#include "GLContextProvider.h"
 
 #include "mozilla/mozalloc.h"
 #include <stdint.h>
@@ -23,7 +20,6 @@ namespace mozilla {
 
 using layers::ImageContainer;
 using layers::PlanarYCbCrImage;
-using layers::SharedTextureImage;
 
 // Verify these values are sane. Once we've checked the frame sizes, we then
 // can do less integer overflow checking.
@@ -283,50 +279,6 @@ VideoData* VideoData::Create(VideoInfo& aInfo,
 {
   return Create(aInfo, nullptr, aImage, aOffset, aTime, aEndTime, aBuffer,
                 aKeyframe, aTimecode, aPicture);
-}
-
-VideoData* VideoData::Create(VideoInfo& aInfo,
-                             ImageContainer* aContainer,
-                             void* aMagicHandle,
-                             nsIntRect aPicture,
-                             int64_t aOffset,
-                             int64_t aTime,
-                             int64_t aEndTime,
-                             bool aKeyframe,
-                             int64_t aTimecode)
-{
-  nsAutoPtr<VideoData> v(new VideoData(aOffset,
-                                       aTime,
-                                       aEndTime,
-                                       aKeyframe,
-                                       aTimecode,
-                                       aInfo.mDisplay));
-
-  ImageFormat format = SHARED_TEXTURE;
-  nsRefPtr<Image> image = aContainer->CreateImage(&format, 1);
-  if (!image) {
-    return nullptr;
-  }
-
-  NS_ASSERTION(image->GetFormat() == SHARED_TEXTURE, "Wrong format?");
-
-  SharedTextureImage::Data data;
-  data.mShareType = gl::SameProcess;
-  data.mInverted = false;
-  data.mHandle = gl::GLContextProvider::CreateSharedHandle(data.mShareType,
-                                                           aMagicHandle,
-                                                           gl::GstreamerMagicHandle);
-
-  // Use the device pixel size of the IOSurface, since layers handles resolution scaling
-  // already.
-  data.mSize = gfxIntSize(aPicture.width, aPicture.height);
-
-  SharedTextureImage* sharedImage = static_cast<SharedTextureImage*>(image.get());
-  sharedImage->SetData(data);
-
-  v->mImage = image;
-
-  return v.forget();
 }
 
 VideoData* VideoData::CreateFromImage(VideoInfo& aInfo,

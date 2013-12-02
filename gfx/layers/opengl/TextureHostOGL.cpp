@@ -303,19 +303,6 @@ SharedTextureSourceOGL::SharedTextureSourceOGL(CompositorOGL* aCompositor,
   , mWrapMode(aWrapMode)
 {}
 
-SharedTextureSourceOGL::~SharedTextureSourceOGL()
-{
-  if (!gl()) {
-    return;
-  }
-
-  if (mSharedHandle)
-  {
-    gl()->ReleaseSharedHandle(mShareType, mSharedHandle);
-    mSharedHandle = 0;
-  }
-}
-
 void
 SharedTextureSourceOGL::BindTexture(GLenum aTextureUnit)
 {

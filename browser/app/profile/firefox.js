@@ -128,10 +128,10 @@ pref("app.update.cert.maxErrors", 5);
 // when the |app.update.cert.checkAttributes| preference is set to false. Also,
 // the |app.update.url.override| preference should ONLY be used for testing.
 // IMPORTANT! metro.js should also be updated for updates to certs.X.issuerName
-pref("app.update.certs.1.issuerName", "OU=Equifax Secure Certificate Authority,O=Equifax,C=US");
+pref("app.update.certs.1.issuerName", "CN=Thawte SSL CA,O=\"Thawte, Inc.\",C=US");
 pref("app.update.certs.1.commonName", "aus3.mozilla.org");
 
-pref("app.update.certs.2.issuerName", "CN=Thawte SSL CA,O=\"Thawte, Inc.\",C=US");
+pref("app.update.certs.2.issuerName", "CN=DigiCert Secure Server CA,O=DigiCert Inc,C=US");
 pref("app.update.certs.2.commonName", "aus3.mozilla.org");
 
 // Whether or not app updates are enabled
@@ -639,9 +639,18 @@ pref("plugins.update.notifyUser", false);
 
 pref("plugins.click_to_play", true);
 
-// let all plugins except Flash default to click-to-play
+#ifdef RELEASE_BUILD
+// For now, plugins other than Java and Flash are enabled in beta/release
+// and click-to-activate in earlier channels.
+pref("plugin.default.state", 2);
+#else
 pref("plugin.default.state", 1);
+#endif
+
+// Flash is enabled by default, and Java is click-to-activate by default on
+// all channels.
 pref("plugin.state.flash", 2);
+pref("plugin.state.java", 1);
 
 // display door hanger if flash not installed
 pref("plugins.notifyMissingFlash", true);

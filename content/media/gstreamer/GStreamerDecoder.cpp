@@ -31,22 +31,6 @@ GStreamerDecoder::Load(nsIStreamListener** aListener,
   return MediaDecoder::Load(aListener, aCloneDonor);
 }
 
-nsresult GStreamerDecoder::Play()
-{
-  if (mReader)
-    mReader->Play();
-
-  return MediaDecoder::Play();
-}
-
-void GStreamerDecoder::Pause()
-{
-  if (mReader)
-    mReader->Pause();
-
-  MediaDecoder::Pause();
-}
-
 void GStreamerDecoder::Suspend()
 {
   if (mReader) {
@@ -54,15 +38,6 @@ void GStreamerDecoder::Suspend()
   }
 
   MediaDecoder::Suspend();
-}
-
-void GStreamerDecoder::Resume(bool aForceBuffering)
-{
-  if (mReader) {
-    mReader->Resume(aForceBuffering);
-  }
-
-  MediaDecoder::Resume(aForceBuffering);
 }
 
 bool

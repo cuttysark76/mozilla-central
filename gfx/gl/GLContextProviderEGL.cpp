@@ -4,6 +4,7 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 // please add new includes below Qt, otherwise it break Qt build due malloc wrapper conflicts
+
 #if defined(XP_UNIX)
 
 #ifdef MOZ_WIDGET_GTK
@@ -21,10 +22,6 @@
 #include "libdisplay/GonkDisplay.h"
 #endif
 
-#ifdef HAS_NEMO_INTERFACE
-#include <gst/interfaces/nemovideotexture.h>
-#endif
-
 #if defined(MOZ_X11)
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
@@ -34,7 +31,6 @@
 
 #include "GLContext.h"
 #include "mozilla/Util.h"
-
 
 #if defined(ANDROID)
 /* from widget */
@@ -670,8 +666,6 @@ public:
                                         SharedHandleDetails& details);
     virtual bool AttachSharedHandle(SharedTextureShareType shareType,
                                     SharedTextureHandle sharedHandle);
-    virtual void DetachSharedHandle(SharedTextureShareType shareType,
-                                    SharedTextureHandle sharedHandle);
 
 protected:
     friend class GLContextProviderEGL;
@@ -758,9 +752,6 @@ enum SharedHandleType {
 #ifdef MOZ_WIDGET_ANDROID
     , SharedHandleType_SurfaceTexture
 #endif
-#ifdef HAS_NEMO_INTERFACE
-    , SharedHandleType_GstreamerMagicHandle
-#endif
 };
 
 class SharedTextureHandleWrapper
@@ -800,30 +791,6 @@ public:
 };
 
 #endif // MOZ_WIDGET_ANDROID
-
-#ifdef HAS_NEMO_INTERFACE
-class GstVideoSyncWrapper: public SharedTextureHandleWrapper
-{
-public:
-    GstVideoSyncWrapper(void* aPlaySink)
-      : SharedTextureHandleWrapper(SharedHandleType_GstreamerMagicHandle)
-      , mPlaySink(aPlaySink)
-    {
-    }
-
-    virtual ~GstVideoSyncWrapper()
-    {
-        ResetPlaySink();
-    }
-
-    void ResetPlaySink() { mPlaySink = nullptr; }
-
-    void* PlaySink() { return mPlaySink; }
-
-private:
-    void* mPlaySink;
-};
-#endif
 
 class EGLTextureWrapper : public SharedTextureHandleWrapper
 {
@@ -962,14 +929,6 @@ GLContextEGL::CreateSharedHandle(SharedTextureShareType shareType,
 
         return (SharedTextureHandle) new SurfaceTextureWrapper(reinterpret_cast<nsSurfaceTexture*>(buffer));
 #endif
-#ifdef HAS_NEMO_INTERFACE
-    case SharedHandleType_GstreamerMagicHandle: {
-        GstVideoSyncWrapper* wrap = new GstVideoSyncWrapper(static_cast<GstElement*>(buffer));
-        g_object_set(G_OBJECT(buffer), "egl-display", EGL_DISPLAY(), NULL);
-        return (SharedTextureHandle)wrap;
-    }
-#endif
-
     case SharedTextureBufferType::TextureID: {
         if (!mShareWithEGLImage)
             return 0;
@@ -1006,11 +965,7 @@ void GLContextEGL::ReleaseSharedHandle(SharedTextureShareType shareType,
         delete wrapper;
         break;
 #endif
-    case SharedHandleType_GstreamerMagicHandle: {
-        GstVideoSyncWrapper* gstwrapper = reinterpret_cast<GstVideoSyncWrapper*>(wrapper);
-        delete gstwrapper;
-        break;
-    }
+    
     case SharedHandleType_Image: {
         NS_ASSERTION(mShareWithEGLImage, "EGLImage not supported or disabled in runtime");
 
@@ -1035,13 +990,6 @@ bool GLContextEGL::GetSharedHandleDetails(SharedTextureShareType shareType,
     SharedTextureHandleWrapper* wrapper = reinterpret_cast<SharedTextureHandleWrapper*>(sharedHandle);
 
     switch (wrapper->Type()) {
-#ifdef HAS_NEMO_INTERFACE
-    case SharedHandleType_GstreamerMagicHandle: {
-        details.mTarget = LOCAL_GL_TEXTURE_EXTERNAL;
-        details.mTextureFormat = FORMAT_R8G8B8A8;
-        break;
-    }
-#endif
 #ifdef MOZ_WIDGET_ANDROID
     case SharedHandleType_SurfaceTexture: {
         SurfaceTextureWrapper* surfaceWrapper = reinterpret_cast<SurfaceTextureWrapper*>(wrapper);
@@ -1066,32 +1014,6 @@ bool GLContextEGL::GetSharedHandleDetails(SharedTextureShareType shareType,
     return true;
 }
 
-void GLContextEGL::DetachSharedHandle(SharedTextureShareType shareType,
-                                      SharedTextureHandle sharedHandle)
-{
-#ifdef HAS_NEMO_INTERFACE
-    if (shareType != SameProcess)
-        return;
-
-    SharedTextureHandleWrapper* wrapper = reinterpret_cast<SharedTextureHandleWrapper*>(sharedHandle);
-    switch (wrapper->Type()) {
-    case SharedHandleType_GstreamerMagicHandle: {
-        GstVideoSyncWrapper* gstwrapper = reinterpret_cast<GstVideoSyncWrapper*>(sharedHandle);
-        NemoGstVideoTexture *sink = NEMO_GST_VIDEO_TEXTURE(gstwrapper->PlaySink());
-        if (sink) {
-            nemo_gst_video_texture_unbind_frame(sink);
-            EGLSync sync = sEGLLibrary.fCreateSync(EGL_DISPLAY(), LOCAL_EGL_SYNC_FENCE, nullptr);
-            nemo_gst_video_texture_release_frame(sink, sync);
-        }
-        return;
-    }
-    default:
-        NS_ERROR("Unhandled shared handle type");
-        return;
-    }
-#endif
-}
-
 bool GLContextEGL::AttachSharedHandle(SharedTextureShareType shareType,
                                       SharedTextureHandle sharedHandle)
 {
@@ -1101,28 +1023,6 @@ bool GLContextEGL::AttachSharedHandle(SharedTextureShareType shareType,
     SharedTextureHandleWrapper* wrapper = reinterpret_cast<SharedTextureHandleWrapper*>(sharedHandle);
 
     switch (wrapper->Type()) {
-#ifdef HAS_NEMO_INTERFACE
-    case SharedHandleType_GstreamerMagicHandle: {
-        GstVideoSyncWrapper* gstwrapper = reinterpret_cast<GstVideoSyncWrapper*>(sharedHandle);
-        void* objSink = gstwrapper->PlaySink();
-        if (objSink) {
-            NemoGstVideoTexture *sink = NEMO_GST_VIDEO_TEXTURE(objSink);
-            if (!nemo_gst_video_texture_acquire_frame(sink)) {
-                gstwrapper->ResetPlaySink();
-                return false;
-            }
-
-            EGLImage img;
-            if (!nemo_gst_video_texture_bind_frame (sink, &img)) {
-                nemo_gst_video_texture_release_frame (sink, NULL);
-                gstwrapper->ResetPlaySink();
-                return false;
-            }
-            fEGLImageTargetTexture2D(LOCAL_GL_TEXTURE_EXTERNAL, img);
-        }
-        break;
-    }
-#endif
 #ifdef MOZ_WIDGET_ANDROID
     case SharedHandleType_SurfaceTexture: {
 #ifndef DEBUG
@@ -2137,15 +2037,6 @@ GLContextProviderEGL::CreateSharedHandle(SharedTextureShareType shareType,
                                          void* buffer,
                                          SharedTextureBufferType bufferType)
 {
-#ifdef HAS_NEMO_INTERFACE
-  if (shareType == gl::SameProcess &&
-      bufferType == gl::GstreamerMagicHandle) {
-
-    GstVideoSyncWrapper* wrap = new GstVideoSyncWrapper(static_cast<GstElement*>(buffer));
-    g_object_set(G_OBJECT(buffer), "egl-display", EGL_DISPLAY(), NULL);
-    return (SharedTextureHandle)wrap;
-  }
-#endif
   return 0;
 }
 
