@@ -182,7 +182,6 @@ MOCHITEST_BROWSER_FILES = \
                  browser_bug839103.js \
                  browser_bug880101.js \
                  browser_bug882977.js \
-                 browser_bug887515.js \
                  browser_canonizeURL.js \
                  browser_mixedcontent_securityflags.js \
                  browser_no_mcb_on_http_site.js \
@@ -230,6 +229,8 @@ MOCHITEST_BROWSER_FILES = \
                  browser_popupUI.js \
                  browser_private_browsing_window.js \
                  browser_private_no_prompt.js \
+                 browser_registerProtocolHandler_notification.html \
+                 browser_registerProtocolHandler_notification.js \
                  browser_relatedTabs.js \
                  browser_removeTabsToTheEnd.js \
                  browser_sanitize-passwordDisabledHosts.js \
@@ -321,6 +322,7 @@ MOCHITEST_BROWSER_FILES = \
                  plugin_clickToPlayDeny.html \
                  plugin_hidden_to_visible.html \
                  plugin_small.html \
+                 plugin_syncRemoved.html \
                  plugin_test.html \
                  plugin_test2.html \
                  plugin_test3.html \

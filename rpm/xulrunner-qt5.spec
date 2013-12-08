@@ -9,7 +9,8 @@ License:    Mozilla License
 URL:        http://hg.mozilla.org/mozilla-central
 Source0:    %{name}-%{version}.tar.bz2
 Patch0:     add-sailfishos-org-certs.patch
-Patch1:     disable-x11-bits.patch
+Patch1:     stop-progressive-update-when-region-is-empty.patch
+Patch2:     disable-x11-bits.patch
 BuildRequires:  pkgconfig(Qt5Core)
 BuildRequires:  pkgconfig(Qt5Gui)
 BuildRequires:  pkgconfig(Qt5Network)
@@ -66,6 +67,7 @@ Tests and misc files for xulrunner
 %setup -q -n %{name}-%{version}
 %patch0 -p1
 %patch1 -p1
+%patch2 -p1
 
 %build
 export DONT_POPULATE_VIRTUALENV=1

@@ -721,16 +721,6 @@ else
     AC_MSG_RESULT([yes])
 fi
 
-MOZ_ARG_WITH_BOOL(system-ply,
-[  --with-system-ply       Use system installed python ply library],
-    [if $PYTHON -c 'import ply' 2>&5; then
-         MOZ_SYSTEM_PLY=1
-     else
-         AC_MSG_ERROR([python ply library is not found but --with-system-ply was requested])
-     fi])
-
-AC_SUBST(MOZ_SYSTEM_PLY)
-
 if test -z "$COMPILE_ENVIRONMENT"; then
     NSINSTALL_BIN='$(PYTHON) $(topsrcdir)/config/nsinstall.py'
 fi
@@ -1750,6 +1740,7 @@ fi
 dnl Get mozilla version from central milestone file
 MOZILLA_VERSION=`$PERL $srcdir/config/milestone.pl -topsrcdir $srcdir`
 MOZILLA_UAVERSION=`$PERL $srcdir/config/milestone.pl -topsrcdir $srcdir -uaversion`
+MOZILLA_SYMBOLVERSION=`$PERL $srcdir/config/milestone.pl -topsrcdir $srcdir -symbolversion`
 
 dnl Get version of various core apps from the version files.
 FIREFOX_VERSION=`cat $_topsrcdir/browser/config/version.txt`
@@ -1761,6 +1752,7 @@ fi
 AC_DEFINE_UNQUOTED(MOZILLA_VERSION,"$MOZILLA_VERSION")
 AC_DEFINE_UNQUOTED(MOZILLA_VERSION_U,$MOZILLA_VERSION)
 AC_DEFINE_UNQUOTED(MOZILLA_UAVERSION,"$MOZILLA_UAVERSION")
+AC_SUBST(MOZILLA_SYMBOLVERSION)
 
 MOZ_DOING_LTO(lto_is_enabled)
 
@@ -3735,7 +3727,7 @@ MOZ_ARG_WITH_BOOL(system-nspr,
     _USE_SYSTEM_NSPR=1 )
 
 if test -n "$_USE_SYSTEM_NSPR"; then
-    AM_PATH_NSPR(4.9.6, [MOZ_NATIVE_NSPR=1], [AC_MSG_ERROR([your don't have NSPR installed or your version is too old])])
+    AM_PATH_NSPR(4.10.2, [MOZ_NATIVE_NSPR=1], [AC_MSG_ERROR([your don't have NSPR installed or your version is too old])])
 fi
 
 if test -n "$MOZ_NATIVE_NSPR"; then
@@ -5788,17 +5780,6 @@ if test "$MOZ_GSTREAMER"; then
                       gstreamer-plugins-base-$GST_API_VERSION, ,
                       AC_MSG_ERROR([gstreamer and gstreamer-plugins-base development packages are needed to build gstreamer backend. Install them or disable gstreamer support with --disable-gstreamer]))
 
-    PKG_CHECK_MODULES(NEMO_GST, nemo-gstreamer-interfaces-$GST_API_VERSION,
-                      HAS_NEMO_INTERFACE=1,
-                      HAS_NEMO_INTERFACE=)
-
-    if test "$HAS_NEMO_INTERFACE"; then
-        HAS_NEMO_INTERFACE=1
-        AC_DEFINE(HAS_NEMO_INTERFACE)
-        GSTREAMER_LIBS="$GSTREAMER_LIBS $NEMO_GST_LIBS"
-        GSTREAMER_CFLAGS="$GSTREAMER_CFLAGS $NEMO_GST_CFLAGS"
-    fi
-
     PKG_CHECK_MODULES(NEMO_RESOURCE, libresourceqt5,
                       HAS_NEMO_RESOURCE=1,
                       HAS_NEMO_RESOURCE=)
@@ -5827,7 +5808,6 @@ fi
 AC_SUBST(GSTREAMER_CFLAGS)
 AC_SUBST(GSTREAMER_LIBS)
 AC_SUBST(MOZ_GSTREAMER)
-AC_SUBST(HAS_NEMO_INTERFACE)
 AC_SUBST(HAS_NEMO_RESOURCE)
 
 if test -n "$MOZ_GSTREAMER"; then
