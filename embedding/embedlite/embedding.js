@@ -262,7 +262,7 @@ pref("plugin.default.state", 1);
 pref("notification.feature.enabled", true);
 pref("dom.webnotifications.enabled", true);
 
-pref("layers.progressive-paint", true);
+pref("layers.progressive-paint", false);
 pref("layers.low-precision-buffer", true);
 pref("layers.low-precision-resolution", 250);
 
