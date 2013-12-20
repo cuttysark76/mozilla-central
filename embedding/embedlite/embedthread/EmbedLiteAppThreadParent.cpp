@@ -43,12 +43,9 @@ EmbedLiteAppThreadParent::RecvInitialized()
   PR_SetEnv("MOZ_USE_OMTC=1");
   mApp->Initialized();
   bool accel = mApp->IsAccelerated();
-  SetBoolPref("layers.acceleration.disabled", !accel);
-  SetBoolPref("layers.acceleration.force-enabled", accel);
-  SetBoolPref("layers.async-video.enabled", accel && getenv("DISABLE_ASYNC_VIDEO") == 0);
-  SetBoolPref("gfx.use_tiled_thebes", accel && getenv("DISABLE_TILED") == 0);
-  SetBoolPref("egl.use_backing_surface", accel && getenv("DISABLE_BACKING") == 0);
-  SetBoolPref("layers.reuse-invalid-tiles", getenv("DISABLE_REUSE_TILES") != 0);
+  mApp->SetBoolPref("layers.acceleration.disabled", !accel);
+  mApp->SetBoolPref("layers.acceleration.force-enabled", accel);
+  mApp->SetBoolPref("layers.async-video.enabled", accel);
   return true;
 }
 
@@ -98,21 +95,6 @@ EmbedLiteAppThreadParent::DeallocPEmbedLiteViewParent(PEmbedLiteViewParent* acto
   LOGT();
   delete actor;
   return true;
-}
-
-void EmbedLiteAppThreadParent::SetBoolPref(const char* aName, bool aValue)
-{
-  unused << SendSetBoolPref(nsDependentCString(aName), aValue);
-}
-
-void EmbedLiteAppThreadParent::SetCharPref(const char* aName, const char* aValue)
-{
-  unused << SendSetCharPref(nsDependentCString(aName), nsDependentCString(aValue));
-}
-
-void EmbedLiteAppThreadParent::SetIntPref(const char* aName, int aValue)
-{
-  unused << SendSetIntPref(nsDependentCString(aName), aValue);
 }
 
 bool

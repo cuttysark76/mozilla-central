@@ -16,6 +16,9 @@ using namespace mozilla::embedlite;
 using namespace mozilla::gfx;
 using namespace mozilla::layers;
 
+class FakeListener : public EmbedLiteViewListener {};
+static FakeListener sFakeListener;
+
 EmbedContentController::EmbedContentController(EmbedLiteViewThreadParent* aRenderFrame, CompositorParent* aCompositor, MessageLoop* aUILoop)
   : mUILoop(aUILoop)
   , mRenderFrame(aRenderFrame)
@@ -44,8 +47,7 @@ void EmbedContentController::HandleDoubleTap(const CSSIntPoint& aPoint, int32_t 
             NewRunnableMethod(this, &EmbedContentController::HandleDoubleTap, aPoint, aModifiers));
         return;
     }
-    EmbedLiteViewListener* listener = GetListener();
-    if (listener && !listener->HandleDoubleTap(nsIntPoint(aPoint.x, aPoint.y))) {
+    if (!GetListener()->HandleDoubleTap(nsIntPoint(aPoint.x, aPoint.y))) {
         unused << mRenderFrame->SendHandleDoubleTap(nsIntPoint(aPoint.x, aPoint.y));
     }
 }
@@ -60,8 +62,7 @@ void EmbedContentController::HandleSingleTap(const CSSIntPoint& aPoint, int32_t 
             NewRunnableMethod(this, &EmbedContentController::HandleSingleTap, aPoint, aModifiers));
         return;
     }
-    EmbedLiteViewListener* listener = GetListener();
-    if (listener && !listener->HandleSingleTap(nsIntPoint(aPoint.x, aPoint.y))) {
+    if (!GetListener()->HandleSingleTap(nsIntPoint(aPoint.x, aPoint.y))) {
         unused << mRenderFrame->SendHandleSingleTap(nsIntPoint(aPoint.x, aPoint.y));
     }
 }
@@ -76,10 +77,13 @@ void EmbedContentController::HandleLongTap(const CSSIntPoint& aPoint, int32_t aM
             NewRunnableMethod(this, &EmbedContentController::HandleLongTap, aPoint, aModifiers));
         return;
     }
-    EmbedLiteViewListener* listener = GetListener();
-    if (listener && !listener->HandleLongTap(nsIntPoint(aPoint.x, aPoint.y))) {
+    if (!GetListener()->HandleLongTap(nsIntPoint(aPoint.x, aPoint.y))) {
         unused << mRenderFrame->SendHandleLongTap(nsIntPoint(aPoint.x, aPoint.y));
     }
+}
+
+void EmbedContentController::HandleLongTapUp(const CSSIntPoint& aPoint, int32_t aModifiers)
+{
 }
 
 /**
@@ -105,8 +109,7 @@ void EmbedContentController::SendAsyncScrollDOMEvent(bool aIsRoot,
           aScrollableSize.width, aScrollableSize.height);
     gfxRect rect(aContentRect.x, aContentRect.y, aContentRect.width, aContentRect.height);
     gfxSize size(aScrollableSize.width, aScrollableSize.height);
-    EmbedLiteViewListener* listener = GetListener();
-    if (listener && !listener->SendAsyncScrollDOMEvent(rect, size)) {
+    if (!GetListener()->SendAsyncScrollDOMEvent(rect, size)) {
         unused << mRenderFrame->SendAsyncScrollDOMEvent(rect, size);
     }
 }
@@ -122,10 +125,7 @@ void EmbedContentController::ScrollUpdate(const CSSPoint& aPosition, const float
                               aPosition, aResolution));
         return;
     }
-    EmbedLiteViewListener* listener = GetListener();
-    if (listener) {
-        listener->ScrollUpdate(gfxPoint(aPosition.x, aPosition.y), aResolution);
-    }
+    GetListener()->ScrollUpdate(gfxPoint(aPosition.x, aPosition.y), aResolution);
 }
 
 void EmbedContentController::ClearRenderFrame()
@@ -142,16 +142,15 @@ void EmbedContentController::PostDelayedTask(Task* aTask, int aDelayMs)
     MessageLoop::current()->PostDelayedTask(FROM_HERE, aTask, aDelayMs);
 }
 
-EmbedLiteViewListener* EmbedContentController::GetListener()
+EmbedLiteViewListener* const EmbedContentController::GetListener() const
 {
     return mRenderFrame && mRenderFrame->mView ?
-           mRenderFrame->mView->GetListener() : nullptr;
+           mRenderFrame->mView->GetListener() : &sFakeListener;
 }
 
 void EmbedContentController::DoRequestContentRepaint(const FrameMetrics& aFrameMetrics)
 {
-    EmbedLiteViewListener* listener = GetListener();
-    if (listener && !listener->RequestContentRepaint()) {
+    if (!GetListener()->RequestContentRepaint()) {
         unused << mRenderFrame->SendUpdateFrame(aFrameMetrics);
     }
 }

@@ -380,7 +380,7 @@ class StackFrame
      */
   public:
     Value *slots() const { return (Value *)(this + 1); }
-    Value *base() const { return slots() + script()->nfixed; }
+    Value *base() const { return slots() + script()->nfixed(); }
     Value *argv() const { return argv_; }
 
   private:
@@ -475,15 +475,15 @@ class StackFrame
     }
 
     inline bool isStrictEvalFrame() const {
-        return isEvalFrame() && script()->strict;
+        return isEvalFrame() && script()->strict();
     }
 
     bool isNonStrictEvalFrame() const {
-        return isEvalFrame() && !script()->strict;
+        return isEvalFrame() && !script()->strict();
     }
 
     bool isDirectEvalFrame() const {
-        return isEvalFrame() && script()->staticLevel > 0;
+        return isEvalFrame() && script()->staticLevel() > 0;
     }
 
     bool isNonStrictDirectEvalFrame() const {
@@ -1021,7 +1021,7 @@ class FrameRegs
     }
 
     Value *spForStackDepth(unsigned depth) const {
-        JS_ASSERT(fp_->script()->nfixed + depth <= fp_->script()->nslots);
+        JS_ASSERT(fp_->script()->nfixed() + depth <= fp_->script()->nslots());
         return fp_->base() + depth;
     }
 
@@ -1041,7 +1041,7 @@ class FrameRegs
     }
     void prepareToRun(StackFrame &fp, JSScript *script) {
         pc = script->code();
-        sp = fp.slots() + script->nfixed;
+        sp = fp.slots() + script->nfixed();
         fp_ = &fp;
     }
 
@@ -1167,6 +1167,13 @@ class Activation
     // set).
     size_t savedFrameChain_;
 
+    // Counter incremented by JS::HideScriptedCaller and decremented by
+    // JS::UnhideScriptedCaller. If > 0 for the top activation,
+    // JS_DescribeScriptedCaller will return null instead of querying that
+    // activation, which should prompt the caller to consult embedding-specific
+    // data structures instead.
+    size_t hideScriptedCallerCount_;
+
     enum Kind { Interpreter, Jit, ForkJoin };
     Kind kind_;
 
@@ -1216,6 +1223,17 @@ class Activation
     }
     bool hasSavedFrameChain() const {
         return savedFrameChain_ > 0;
+    }
+
+    void hideScriptedCaller() {
+        hideScriptedCallerCount_++;
+    }
+    void unhideScriptedCaller() {
+        JS_ASSERT(hideScriptedCallerCount_ > 0);
+        hideScriptedCallerCount_--;
+    }
+    bool scriptedCallerIsHidden() const {
+        return hideScriptedCallerCount_ > 0;
     }
 
   private:
@@ -1616,7 +1634,7 @@ class NonBuiltinScriptFrameIter : public ScriptFrameIter
 
     void settle() {
         if (!includeSelfhostedFrames())
-            while (!done() && script()->selfHosted)
+            while (!done() && script()->selfHosted())
                 ScriptFrameIter::operator++();
     }
 

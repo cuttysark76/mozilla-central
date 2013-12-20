@@ -1073,6 +1073,7 @@ FileAsString(JSContext *cx, const char *pathname)
         JS_ReportError(cx, "can't open %s: %s", pathname, strerror(errno));
         return nullptr;
     }
+    AutoCloseInputFile autoClose(file);
 
     if (fseek(file, 0, SEEK_END) != 0) {
         JS_ReportError(cx, "can't seek end of %s", pathname);
@@ -1102,7 +1103,6 @@ FileAsString(JSContext *cx, const char *pathname)
             }
         }
     }
-    fclose(file);
 
     return str;
 }
@@ -1115,6 +1115,7 @@ FileAsTypedArray(JSContext *cx, const char *pathname)
         JS_ReportError(cx, "can't open %s: %s", pathname, strerror(errno));
         return nullptr;
     }
+    AutoCloseInputFile autoClose(file);
 
     RootedObject obj(cx);
     if (fseek(file, 0, SEEK_END) != 0) {
@@ -1136,7 +1137,6 @@ FileAsTypedArray(JSContext *cx, const char *pathname)
             }
         }
     }
-    fclose(file);
     return obj;
 }
 
@@ -1522,7 +1522,7 @@ TrapHandler(JSContext *cx, JSScript *, jsbytecode *pc, jsval *rvalArg,
 
     if (!frame.evaluateUCInStackFrame(cx, chars, length,
                                       script->filename(),
-                                      script->lineno,
+                                      script->lineno(),
                                       &rval))
     {
         *rvalArg = rval;
@@ -1706,7 +1706,7 @@ SrcNotes(JSContext *cx, HandleScript script, Sprinter *sp)
     Sprint(sp, "---- ---- ----- ------ -------- ------\n");
     unsigned offset = 0;
     unsigned colspan = 0;
-    unsigned lineno = script->lineno;
+    unsigned lineno = script->lineno();
     jssrcnote *notes = script->notes();
     unsigned switchTableEnd = 0, switchTableStart = 0;
     for (jssrcnote *sn = notes; !SN_IS_TERMINATOR(sn); sn = SN_NEXT(sn)) {
@@ -2293,7 +2293,7 @@ Clone(JSContext *cx, unsigned argc, jsval *vp)
     }
     if (funobj->compartment() != cx->compartment()) {
         JSFunction *fun = &funobj->as<JSFunction>();
-        if (fun->hasScript() && fun->nonLazyScript()->compileAndGo) {
+        if (fun->hasScript() && fun->nonLazyScript()->compileAndGo()) {
             JS_ReportErrorNumber(cx, js_GetErrorMessage, nullptr, JSMSG_UNEXPECTED_TYPE,
                                  "function", "compile-and-go");
             return false;
@@ -2715,10 +2715,22 @@ static const JSClass resolver_class = {
 static bool
 Resolver(JSContext *cx, unsigned argc, jsval *vp)
 {
-    RootedObject referent(cx, nullptr);
-    RootedObject proto(cx, nullptr);
-    if (!JS_ConvertArguments(cx, argc, JS_ARGV(cx, vp), "o/o", &referent, &proto))
+    CallArgs args = CallArgsFromVp(argc, vp);
+
+    RootedObject referent(cx);
+    if (!JS_ValueToObject(cx, args.get(0), &referent))
         return false;
+    if (!referent) {
+        JS_ReportErrorNumber(cx, js_GetErrorMessage, nullptr, JSMSG_CANT_CONVERT_TO,
+                             args.get(0).isNull() ? "null" : "undefined", "object");
+        return false;
+    }
+
+    RootedObject proto(cx, nullptr);
+    if (!args.get(1).isNullOrUndefined()) {
+        if (!JS_ValueToObject(cx, args.get(1), &proto))
+            return false;
+    }
 
     RootedObject parent(cx, JS_GetParent(referent));
     JSObject *result = (argc > 1
@@ -2727,8 +2739,8 @@ Resolver(JSContext *cx, unsigned argc, jsval *vp)
     if (!result)
         return false;
 
-    JS_SetReservedSlot(result, 0, OBJECT_TO_JSVAL(referent));
-    JS_SET_RVAL(cx, vp, OBJECT_TO_JSVAL(result));
+    JS_SetReservedSlot(result, 0, ObjectValue(*referent));
+    args.rval().setObject(*result);
     return true;
 }
 
@@ -4641,8 +4653,9 @@ env_setProperty(JSContext *cx, HandleObject obj, HandleId id, bool strict, Mutab
     int rv;
 
     RootedValue idvalue(cx, IdToValue(id));
+    RootedString idstring(cx, ToString(cx, idvalue));
     JSAutoByteString idstr;
-    if (!idstr.encodeLatin1(cx, idvalue.toString()))
+    if (!idstr.encodeLatin1(cx, idstring))
         return false;
 
     RootedString value(cx, ToString(cx, vp));
@@ -4716,8 +4729,9 @@ env_resolve(JSContext *cx, HandleObject obj, HandleId id, unsigned flags,
             MutableHandleObject objp)
 {
     RootedValue idvalue(cx, IdToValue(id));
+    RootedString idstring(cx, ToString(cx, idvalue));
     JSAutoByteString idstr;
-    if (!idstr.encodeLatin1(cx, idvalue.toString()))
+    if (!idstr.encodeLatin1(cx, idstring))
         return false;
 
     const char *name = idstr.ptr();

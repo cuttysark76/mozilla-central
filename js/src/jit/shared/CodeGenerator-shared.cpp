@@ -281,7 +281,11 @@ CodeGeneratorShared::encode(LSnapshot *snapshot)
 #ifdef DEBUG
         if (GetIonContext()->cx) {
             uint32_t stackDepth;
-            if (ReconstructStackDepth(GetIonContext()->cx, script, bailPC, &stackDepth)) {
+            bool reachablePC;
+            if (!ReconstructStackDepth(GetIonContext()->cx, script, bailPC, &stackDepth, &reachablePC))
+                return false;
+
+            if (reachablePC) {
                 if (JSOp(*bailPC) == JSOP_FUNCALL) {
                     // For fun.call(this, ...); the reconstructStackDepth will
                     // include the this. When inlining that is not included.
@@ -975,8 +979,7 @@ CodeGeneratorShared::jumpToBlock(MBasicBlock *mir)
         CodeOffsetJump backedge = masm.jumpWithPatch(&rejoin);
         masm.bind(&rejoin);
 
-        if (!patchableBackedges_.append(PatchableBackedgeInfo(backedge, mir->lir()->label(), oolEntry)))
-            MOZ_CRASH();
+        masm.propagateOOM(patchableBackedges_.append(PatchableBackedgeInfo(backedge, mir->lir()->label(), oolEntry)));
     } else {
         masm.jump(mir->lir()->label());
     }
@@ -992,8 +995,7 @@ CodeGeneratorShared::jumpToBlock(MBasicBlock *mir, Assembler::Condition cond)
         CodeOffsetJump backedge = masm.jumpWithPatch(&rejoin, cond);
         masm.bind(&rejoin);
 
-        if (!patchableBackedges_.append(PatchableBackedgeInfo(backedge, mir->lir()->label(), oolEntry)))
-            MOZ_CRASH();
+        masm.propagateOOM(patchableBackedges_.append(PatchableBackedgeInfo(backedge, mir->lir()->label(), oolEntry)));
     } else {
         masm.j(cond, mir->lir()->label());
     }

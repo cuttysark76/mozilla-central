@@ -6,6 +6,7 @@
 #define LOG_COMPONENT "EmbedLiteRenderTarget"
 #include "EmbedLog.h"
 
+#include "mozilla/layers/CompositorParent.h"
 #include "EmbedLiteRenderTarget.h"
 #include "EmbedLiteApp.h"
 #include "mozilla/layers/CompositingRenderTargetOGL.h"
@@ -16,11 +17,13 @@ using namespace mozilla::layers;
 using namespace mozilla::gfx;
 using namespace mozilla::embedlite;
 
-EmbedLiteRenderTarget::EmbedLiteRenderTarget(int width, int height, mozilla::layers::LayerManagerComposite* aComposite)
+EmbedLiteRenderTarget::EmbedLiteRenderTarget(int width, int height, CompositorParent* aCompositor)
 {
   SurfaceInitMode mode = INIT_MODE_CLEAR;
   IntRect rect(0, 0, width, height);
-  mCurrentRenderTarget = static_cast<CompositorOGL*>(aComposite->GetCompositor())->CreateRenderTarget(rect, mode);
+  const CompositorParent::LayerTreeState* state = CompositorParent::GetIndirectShadowTree(aCompositor->RootLayerTreeId());
+
+  mCurrentRenderTarget = static_cast<CompositorOGL*>(state->mLayerManager->GetCompositor())->CreateRenderTarget(rect, mode);
 }
 
 EmbedLiteRenderTarget::~EmbedLiteRenderTarget()

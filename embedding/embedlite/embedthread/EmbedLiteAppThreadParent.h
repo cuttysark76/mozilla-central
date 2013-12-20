@@ -18,10 +18,6 @@ class EmbedLiteAppThreadParent : public PEmbedLiteAppParent
 public:
   virtual ~EmbedLiteAppThreadParent();
 
-  virtual void SetBoolPref(const char* aName, bool aValue);
-  virtual void SetCharPref(const char* aName, const char* aValue);
-  virtual void SetIntPref(const char* aName, int aValue);
-
   // IPDL
   virtual bool
   RecvInitialized();

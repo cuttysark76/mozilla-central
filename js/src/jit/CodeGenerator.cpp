@@ -2762,7 +2762,7 @@ CodeGenerator::maybeCreateScriptCounts()
     CompileInfo *outerInfo = &gen->info();
     JSScript *script = outerInfo->script();
 
-    if (script && !script->hasScriptCounts && !script->initScriptCounts(cx))
+    if (script && !script->hasScriptCounts() && !script->initScriptCounts(cx))
         return nullptr;
 
     counts = js_new<IonScriptCounts>();
@@ -2770,9 +2770,6 @@ CodeGenerator::maybeCreateScriptCounts()
         js_delete(counts);
         return nullptr;
     }
-
-    if (script)
-        script->addIonCounts(counts);
 
     for (size_t i = 0; i < graph.numBlocks(); i++) {
         MBasicBlock *block = graph.getBlock(i)->mir();
@@ -2785,16 +2782,20 @@ CodeGenerator::maybeCreateScriptCounts()
             MResumePoint *resume = block->entryResumePoint();
             while (resume->caller())
                 resume = resume->caller();
-            JS_ASSERT(script->containsPC(resume->pc()));
+            offset = script->pcToOffset(resume->pc());
         }
 
-        if (!counts->block(i).init(block->id(), offset, block->numSuccessors()))
+        if (!counts->block(i).init(block->id(), offset, block->numSuccessors())) {
+            js_delete(counts);
             return nullptr;
+        }
         for (size_t j = 0; j < block->numSuccessors(); j++)
             counts->block(i).setSuccessor(j, block->getSuccessor(j)->id());
     }
 
-    if (!script) {
+    if (script) {
+        script->addIonCounts(counts);
+    } else {
         // Compiling code for Asm.js. Leave the counts on the CodeGenerator to
         // be picked up by the AsmJSModule after generation finishes.
         unassociatedScriptCounts_ = counts;
@@ -5790,7 +5791,7 @@ CodeGenerator::generate()
 {
     IonSpew(IonSpew_Codegen, "# Emitting code for script %s:%d",
             gen->info().script()->filename(),
-            gen->info().script()->lineno);
+            gen->info().script()->lineno());
 
     if (!safepoints_.init(gen->alloc(), graph.totalSlotCount()))
         return false;
@@ -5885,8 +5886,10 @@ CodeGenerator::link(JSContext *cx, types::CompilerConstraintList *constraints)
                      cacheList_.length(), runtimeData_.length(),
                      safepoints_.size(), callTargets.length(),
                      patchableBackedges_.length());
-    if (!ionScript)
+    if (!ionScript) {
+        recompileInfo.compilerOutput(cx->compartment()->types)->invalidate();
         return false;
+    }
 
     // Lock the runtime against operation callbacks during the link.
     // We don't want an operation callback to protect the code for the script
@@ -5909,6 +5912,7 @@ CodeGenerator::link(JSContext *cx, types::CompilerConstraintList *constraints)
         // Use js_free instead of IonScript::Destroy: the cache list and
         // backedge list are still uninitialized.
         js_free(ionScript);
+        recompileInfo.compilerOutput(cx->compartment()->types)->invalidate();
         return false;
     }
 
@@ -5929,6 +5933,7 @@ CodeGenerator::link(JSContext *cx, types::CompilerConstraintList *constraints)
                         /* resetUses */ false, /* cancelOffThread*/ false))
         {
             js_free(ionScript);
+            recompileInfo.compilerOutput(cx->compartment()->types)->invalidate();
             return false;
         }
     }
@@ -6610,7 +6615,7 @@ CodeGenerator::visitCallDeleteProperty(LCallDeleteProperty *lir)
     pushArg(ImmGCPtr(lir->mir()->name()));
     pushArg(ToValue(lir, LCallDeleteProperty::Value));
 
-    if (lir->mir()->block()->info().script()->strict)
+    if (lir->mir()->block()->info().script()->strict())
         return callVM(DeletePropertyStrictInfo, lir);
 
     return callVM(DeletePropertyNonStrictInfo, lir);
@@ -6628,7 +6633,7 @@ CodeGenerator::visitCallDeleteElement(LCallDeleteElement *lir)
     pushArg(ToValue(lir, LCallDeleteElement::Index));
     pushArg(ToValue(lir, LCallDeleteElement::Value));
 
-    if (lir->mir()->block()->info().script()->strict)
+    if (lir->mir()->block()->info().script()->strict())
         return callVM(DeleteElementStrictInfo, lir);
 
     return callVM(DeleteElementNonStrictInfo, lir);

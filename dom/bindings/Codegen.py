@@ -3396,7 +3396,10 @@ for (uint32_t i = 0; i < length; ++i) {
             else:
                 declType = CGGeneric("OwningNonNull<%s>" % name)
             conversion = (
-                "${declName} = new %s(&${val}.toObject());\n" % name)
+                "{ // Scope for tempRoot\n"
+                "  JS::Rooted<JSObject*> tempRoot(cx, &${val}.toObject());\n"
+                "  ${declName} = new %s(tempRoot, mozilla::dom::GetIncumbentGlobal());\n"
+                "}" % name)
 
             template = wrapObjectTemplate(conversion, type,
                                           "${declName} = nullptr",
@@ -3729,7 +3732,10 @@ for (uint32_t i = 0; i < length; ++i) {
         else:
             declType = CGGeneric("OwningNonNull<%s>" % name)
         conversion = (
-            "  ${declName} = new %s(&${val}.toObject());\n" % name)
+            "{ // Scope for tempRoot\n"
+            "  JS::Rooted<JSObject*> tempRoot(cx, &${val}.toObject());\n"
+            "  ${declName} = new %s(tempRoot, mozilla::dom::GetIncumbentGlobal());\n"
+            "}\n" % name)
 
         if allowTreatNonCallableAsNull and type.treatNonCallableAsNull():
             haveCallable = "JS_ObjectIsCallable(cx, &${val}.toObject())"
@@ -7652,8 +7658,13 @@ class CGProxySpecialOperation(CGPerSignatureCall):
     """
     Base class for classes for calling an indexed or named special operation
     (don't use this directly, use the derived classes below).
+
+    If checkFound is False, will just assert that the prop is found instead of
+    checking that it is before wrapping the value.
     """
-    def __init__(self, descriptor, operation):
+    def __init__(self, descriptor, operation, checkFound=True):
+        self.checkFound = checkFound;
+
         nativeName = MakeNativeName(descriptor.binaryNames.get(operation, operation))
         operation = descriptor.operations[operation]
         assert len(operation.signatures()) == 1
@@ -7699,15 +7710,26 @@ class CGProxySpecialOperation(CGPerSignatureCall):
             return ""
 
         wrap = CGGeneric(wrapForType(self.returnType, self.descriptor, self.templateValues))
-        wrap = CGIfWrapper(wrap, "found")
+        if self.checkFound:
+            wrap = CGIfWrapper(wrap, "found")
+        else:
+            wrap = CGList([CGGeneric("MOZ_ASSERT(found);"), wrap], "\n")
         return "\n" + wrap.define()
 
 class CGProxyIndexedOperation(CGProxySpecialOperation):
     """
     Class to generate a call to an indexed operation.
+
+    If doUnwrap is False, the caller is responsible for making sure a variable
+    named 'self' holds the C++ object somewhere where the code we generate
+    will see it.
+
+    If checkFound is False, will just assert that the prop is found instead of
+    checking that it is before wrapping the value.
     """
-    def __init__(self, descriptor, name):
-        CGProxySpecialOperation.__init__(self, descriptor, name)
+    def __init__(self, descriptor, name, doUnwrap=True, checkFound=True):
+        self.doUnwrap = doUnwrap
+        CGProxySpecialOperation.__init__(self, descriptor, name, checkFound)
     def define(self):
         # Our first argument is the id we're getting.
         argName = self.arguments[0].identifier.name
@@ -7716,18 +7738,30 @@ class CGProxyIndexedOperation(CGProxySpecialOperation):
             setIndex = ""
         else:
             setIndex = "uint32_t %s = index;\n" % argName
-        return (setIndex +
-                "%s* self = UnwrapProxy(proxy);\n" +
+        if self.doUnwrap:
+            unwrap = "%s* self = UnwrapProxy(proxy);\n"
+        else:
+            unwrap = ""
+        return (setIndex + unwrap +
                 CGProxySpecialOperation.define(self))
 
 class CGProxyIndexedGetter(CGProxyIndexedOperation):
     """
     Class to generate a call to an indexed getter. If templateValues is not None
     the returned value will be wrapped with wrapForType using templateValues.
+
+    If doUnwrap is False, the caller is responsible for making sure a variable
+    named 'self' holds the C++ object somewhere where the code we generate
+    will see it.
+
+    If checkFound is False, will just assert that the prop is found instead of
+    checking that it is before wrapping the value.
     """
-    def __init__(self, descriptor, templateValues=None):
+    def __init__(self, descriptor, templateValues=None, doUnwrap=True,
+                 checkFound=True):
         self.templateValues = templateValues
-        CGProxyIndexedOperation.__init__(self, descriptor, 'IndexedGetter')
+        CGProxyIndexedOperation.__init__(self, descriptor, 'IndexedGetter',
+                                         doUnwrap, checkFound)
 
 class CGProxyIndexedPresenceChecker(CGProxyIndexedGetter):
     """
@@ -8364,65 +8398,55 @@ class CGDOMJSProxyHandler_finalize(ClassMethod):
         return ("%s self = UnwrapProxy(proxy);\n\n" % (self.descriptor.nativeType + "*") +
                 finalizeHook(self.descriptor, FINALIZE_HOOK_NAME, self.args[0].name).define())
 
-class CGDOMJSProxyHandler_getElementIfPresent(ClassMethod):
+class CGDOMJSProxyHandler_slice(ClassMethod):
     def __init__(self, descriptor):
+        assert descriptor.supportsIndexedProperties()
+
         args = [Argument('JSContext*', 'cx'),
                 Argument('JS::Handle<JSObject*>', 'proxy'),
-                Argument('JS::Handle<JSObject*>', 'receiver'),
-                Argument('uint32_t', 'index'),
-                Argument('JS::MutableHandle<JS::Value>', 'vp'),
-                Argument('bool*', 'present')]
-        ClassMethod.__init__(self, "getElementIfPresent", "bool", args)
+                Argument('uint32_t', 'begin'),
+                Argument('uint32_t', 'end'),
+                Argument('JS::Handle<JSObject*>', 'array')]
+        ClassMethod.__init__(self, "slice", "bool", args)
         self.descriptor = descriptor
+
     def getBody(self):
-        successCode = ("*present = found;\n"
-                       "return true;")
-        templateValues = {'jsvalRef': 'vp', 'jsvalHandle': 'vp',
+        # Just like getOwnPropertyNames we'll assume that we have no holes, so
+        # we have all properties from 0 to length.  If that ever changes
+        # (unlikely), we'll need to do something a bit more clever with how we
+        # forward on to our ancestor.
+        header = CGGeneric(
+            'JS::Rooted<JS::Value> temp(cx);\n'
+            'MOZ_ASSERT(!xpc::WrapperFactory::IsXrayWrapper(proxy),\n'
+            '           "Should not have a XrayWrapper here");\n'
+            '\n'
+            '%s* self = UnwrapProxy(proxy);\n'
+            'uint32_t length = self->Length();\n'
+            "// Compute the end of the indices we'll get ourselves\n"
+            'uint32_t ourEnd = std::max(begin, std::min(end, length));' %
+            self.descriptor.nativeType)
+
+        successCode = ("js::UnsafeDefineElement(cx, array, index - begin, temp);\n"
+                       "continue;")
+        templateValues = {'jsvalRef': 'temp', 'jsvalHandle': '&temp',
                           'obj': 'proxy', 'successCode': successCode}
-        if self.descriptor.supportsIndexedProperties():
-            get = (CGProxyIndexedGetter(self.descriptor, templateValues).define() + "\n"
-                   "// We skip the expando object and any named getters if\n"
-                   "// there is an indexed getter.\n" +
-                   "\n") % (self.descriptor.nativeType)
-        else:
-            if self.descriptor.supportsNamedProperties():
-                get = CGProxyNamedGetter(self.descriptor, templateValues,
-                                         "UINT_TO_JSVAL(index)").define()
-            get += """
+        get = CGProxyIndexedGetter(self.descriptor, templateValues, False, False)
 
-JS::Rooted<JSObject*> expando(cx, GetExpandoObject(proxy));
-if (expando) {
-  bool isPresent;
-  if (!JS_GetElementIfPresent(cx, expando, index, expando, vp, &isPresent)) {
-    return false;
-  }
-  if (isPresent) {
-    *present = true;
-    return true;
-  }
-}
-"""
+        getOurElements = CGWrapper(
+            CGIndenter(get),
+            pre="for (uint32_t index = begin; index < ourEnd; ++index) {\n",
+            post="\n}")
 
-        return """MOZ_ASSERT(!xpc::WrapperFactory::IsXrayWrapper(proxy),
-             "Should not have a XrayWrapper here");
+        getProtoElements = CGIfWrapper(
+            CGGeneric("JS::Rooted<JSObject*> proto(cx);\n"
+                      "if (!js::GetObjectProto(cx, proxy, &proto)) {\n"
+                      "  return false;\n"
+                      "}\n"
+                      "return js::SliceSlowly(cx, proto, proxy, ourEnd, end, array);"),
+            "end > ourEnd")
 
-""" + get + """
-JS::Rooted<JSObject*> proto(cx);
-if (!js::GetObjectProto(cx, proxy, &proto)) {
-  return false;
-}
-if (proto) {
-  bool isPresent;
-  if (!JS_GetElementIfPresent(cx, proto, index, proxy, vp, &isPresent)) {
-    return false;
-  }
-  *present = isPresent;
-  return true;
-}
-
-*present = false;
-// Can't Debug_SetValueRangeToCrashOnTouch because it's not public
-return true;"""
+        return CGList([header, getOurElements, getProtoElements,
+                       CGGeneric("return true;")], "\n\n").define();
 
 class CGDOMJSProxyHandler_getInstance(ClassMethod):
     def __init__(self):
@@ -8446,9 +8470,11 @@ class CGDOMJSProxyHandler(CGClass):
                    CGDOMJSProxyHandler_className(descriptor),
                    CGDOMJSProxyHandler_finalizeInBackground(descriptor),
                    CGDOMJSProxyHandler_finalize(descriptor),
-                   CGDOMJSProxyHandler_getElementIfPresent(descriptor),
                    CGDOMJSProxyHandler_getInstance(),
                    CGDOMJSProxyHandler_delete(descriptor)]
+        if descriptor.supportsIndexedProperties():
+            methods.append(CGDOMJSProxyHandler_slice(descriptor))
+
         CGClass.__init__(self, 'DOMProxyHandler',
                          bases=[ClassBase('mozilla::dom::DOMProxyHandler')],
                          constructors=constructors,
@@ -10529,7 +10555,7 @@ class CGJSImplClass(CGBindingImplClass):
             decorators = "MOZ_FINAL"
             destructor = None
 
-        baseConstructors=["mImpl(new %s(aJSImplObject))" % jsImplName(descriptor.name),
+        baseConstructors=["mImpl(new %s(aJSImplObject, /* aIncumbentGlobal = */ nullptr))" % jsImplName(descriptor.name),
                           "mParent(aParent)"]
         parentInterface = descriptor.interface.parent
         while parentInterface:
@@ -10656,12 +10682,12 @@ class CGCallback(CGClass):
 
     def getConstructors(self):
         return [ClassConstructor(
-            [Argument("JSObject*", "aCallback")],
+            [Argument("JS::Handle<JSObject*>", "aCallback"), Argument("nsIGlobalObject*", "aIncumbentGlobal")],
             bodyInHeader=True,
             visibility="public",
             explicit=True,
             baseConstructors=[
-                "%s(aCallback)" % self.baseName
+                "%s(aCallback, aIncumbentGlobal)" % self.baseName,
                 ])]
 
     def getMethodImpls(self, method):
@@ -10686,7 +10712,7 @@ class CGCallback(CGClass):
         argsWithoutThis = list(args)
         args.insert(0, Argument("const T&",  "thisObj"))
 
-        setupCall = ("CallSetup s(CallbackPreserveColor(), aRv, aExceptionHandling);\n"
+        setupCall = ("CallSetup s(this, aRv, aExceptionHandling);\n"
                      "if (!s.GetContext()) {\n"
                      "  aRv.Throw(NS_ERROR_UNEXPECTED);\n"
                      "  return${errorReturn};\n"
@@ -10976,7 +11002,7 @@ class CallbackMember(CGNativeMember):
         if self.needThisHandling:
             # It's been done for us already
             return ""
-        callSetup = "CallSetup s(CallbackPreserveColor(), aRv"
+        callSetup = "CallSetup s(this, aRv"
         if self.rethrowContentException:
             # getArgs doesn't add the aExceptionHandling argument but does add
             # aCompartment for us.

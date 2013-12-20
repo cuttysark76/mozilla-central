@@ -11,7 +11,7 @@
 namespace mozilla {
 namespace layers {
 class CompositingRenderTarget;
-class LayerManagerComposite;
+class CompositorParent;
 }
 namespace embedlite {
 
@@ -26,7 +26,7 @@ public:
 private:
   friend class EmbedLiteCompositorParent;
   friend class EmbedLiteViewThreadParent;
-  EmbedLiteRenderTarget(int width, int height, mozilla::layers::LayerManagerComposite* aComposite);
+  EmbedLiteRenderTarget(int width, int height, mozilla::layers::CompositorParent* aComposite);
   virtual mozilla::layers::CompositingRenderTarget* GetRenderSurface() { return mCurrentRenderTarget; }
 
   RefPtr<mozilla::layers::CompositingRenderTarget> mCurrentRenderTarget;

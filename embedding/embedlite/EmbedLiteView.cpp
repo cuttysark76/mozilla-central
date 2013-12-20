@@ -23,10 +23,11 @@ namespace mozilla {
 namespace embedlite {
 
 class FakeListener : public EmbedLiteViewListener {};
+static FakeListener sFakeListener;
 
 EmbedLiteView::EmbedLiteView(EmbedLiteApp* aApp, uint32_t aUniqueID, uint32_t aParent)
   : mApp(aApp)
-  , mListener(new FakeListener())
+  , mListener(NULL)
   , mViewImpl(NULL)
   , mUniqueID(aUniqueID)
   , mParent(aParent)
@@ -56,9 +57,12 @@ void
 EmbedLiteView::SetListener(EmbedLiteViewListener* aListener)
 {
    mListener = aListener;
-   if (!mListener) {
-     mListener = new FakeListener();
-   }
+}
+
+EmbedLiteViewListener* const
+EmbedLiteView::GetListener() const
+{
+  return mListener ? mListener : &sFakeListener;
 }
 
 void

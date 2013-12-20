@@ -73,7 +73,7 @@ js::StartOffThreadAsmJSCompile(ExclusiveContext *cx, AsmJSParallelTask *asmData)
     if (!state.asmJSWorklist.append(asmData))
         return false;
 
-    state.notifyAll(WorkerThreadState::PRODUCER);
+    state.notifyOne(WorkerThreadState::PRODUCER);
     return true;
 }
 
@@ -501,6 +501,13 @@ WorkerThreadState::notifyAll(CondVar which)
     PR_NotifyAllCondVar((which == CONSUMER) ? consumerWakeup : producerWakeup);
 }
 
+void
+WorkerThreadState::notifyOne(CondVar which)
+{
+    JS_ASSERT(isLocked());
+    PR_NotifyCondVar((which == CONSUMER) ? consumerWakeup : producerWakeup);
+}
+
 bool
 WorkerThreadState::canStartAsmJSCompile()
 {
@@ -639,7 +646,7 @@ WorkerThreadState::finishParseTask(JSContext *maybecx, JSRuntime *rt, void *toke
         if (script) {
             // The Debugger only needs to be told about the topmost script that was compiled.
             GlobalObject *compileAndGoGlobal = nullptr;
-            if (script->compileAndGo)
+            if (script->compileAndGo())
                 compileAndGoGlobal = &script->global();
             Debugger::onNewScript(maybecx, script, compileAndGoGlobal);
 

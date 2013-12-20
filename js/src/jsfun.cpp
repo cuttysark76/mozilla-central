@@ -118,7 +118,7 @@ fun_getProperty(JSContext *cx, HandleObject obj_, HandleId id, MutableHandleValu
 
         /* Callsite clones should never escape to script. */
         JSObject &maybeClone = iter.calleev().toObject();
-        if (maybeClone.is<JSFunction>() && maybeClone.as<JSFunction>().nonLazyScript()->isCallsiteClone)
+        if (maybeClone.is<JSFunction>() && maybeClone.as<JSFunction>().nonLazyScript()->isCallsiteClone())
             vp.setObject(*maybeClone.as<JSFunction>().nonLazyScript()->originalFunction());
         else
             vp.set(iter.calleev());
@@ -301,7 +301,7 @@ js::fun_resolve(JSContext *cx, HandleObject obj, HandleId id, unsigned flags,
         if (JSID_IS_ATOM(id, cx->names().length)) {
             if (fun->isInterpretedLazy() && !fun->getOrCreateScript(cx))
                 return false;
-            uint16_t length = fun->hasScript() ? fun->nonLazyScript()->funLength :
+            uint16_t length = fun->hasScript() ? fun->nonLazyScript()->funLength() :
                 fun->nargs - fun->hasRest();
             v.setInt32(length);
         } else {
@@ -640,7 +640,7 @@ js::FunctionToString(JSContext *cx, HandleFunction fun, bool bodyOnly, bool lamb
 
     if (fun->hasScript()) {
         script = fun->nonLazyScript();
-        if (script->isGeneratorExp) {
+        if (script->isGeneratorExp()) {
             if ((!bodyOnly && !out.append("function genexp() {")) ||
                 !out.append("\n    [generator expression]\n") ||
                 (!bodyOnly && !out.append("}")))
@@ -687,8 +687,8 @@ js::FunctionToString(JSContext *cx, HandleFunction fun, bool bodyOnly, bool lamb
         // asserted below, that in Function("function f() {}"), the inner
         // function's sourceStart points to the '(', not the 'f'.
         bool funCon = !fun->isArrow() &&
-                      script->sourceStart == 0 &&
-                      script->sourceEnd == script->scriptSource()->length() &&
+                      script->sourceStart() == 0 &&
+                      script->sourceEnd() == script->scriptSource()->length() &&
                       script->scriptSource()->argumentsNotIncluded();
 
         // Functions created with the constructor can't be arrow functions or
@@ -701,7 +701,7 @@ js::FunctionToString(JSContext *cx, HandleFunction fun, bool bodyOnly, bool lamb
         // have "use strict", we insert "use strict" into the body of the
         // function. This ensures that if the result of toString is evaled, the
         // resulting function will have the same semantics.
-        bool addUseStrict = script->strict && !script->explicitUseStrict && !fun->isArrow();
+        bool addUseStrict = script->strict() && !script->explicitUseStrict() && !fun->isArrow();
 
         bool buildBody = funCon && !bodyOnly;
         if (buildBody) {
@@ -1204,7 +1204,7 @@ JSFunction::createScriptForLazilyInterpretedFunction(JSContext *cx, HandleFuncti
             // A script's starting column isn't set by the bytecode emitter, so
             // specify this from the lazy script so that if an identical lazy
             // script is encountered later a match can be determined.
-            script->column = lazy->column();
+            script->setColumn(lazy->column());
 
             LazyScriptCache::Lookup lookup(cx, lazy);
             cx->runtime()->lazyScriptCache.insert(lookup, script);

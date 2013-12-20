@@ -32,6 +32,7 @@ public:
   virtual void HandleDoubleTap(const CSSIntPoint& aPoint, int32_t aModifiers) MOZ_OVERRIDE;
   virtual void HandleSingleTap(const CSSIntPoint& aPoint, int32_t aModifiers) MOZ_OVERRIDE;
   virtual void HandleLongTap(const CSSIntPoint& aPoint, int32_t aModifiers) MOZ_OVERRIDE;
+  virtual void HandleLongTapUp(const CSSIntPoint& aPoint, int32_t aModifiers) MOZ_OVERRIDE;
   virtual void SendAsyncScrollDOMEvent(bool aIsRoot,
                                        const CSSRect& aContentRect,
                                        const CSSSize& aScrollableSize) MOZ_OVERRIDE;
@@ -51,7 +52,7 @@ public:
 
   mozilla::layers::APZCTreeManager* GetManager() { return mAPZC; }
 private:
-  EmbedLiteViewListener* GetListener();
+  EmbedLiteViewListener* const GetListener() const;
   void DoRequestContentRepaint(const FrameMetrics& aFrameMetrics);
 
   MessageLoop* mUILoop;

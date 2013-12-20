@@ -1448,7 +1448,6 @@ JSObject *
 js::NewObjectWithType(JSContext *cx, HandleTypeObject type, JSObject *parent, gc::AllocKind allocKind,
                       NewObjectKind newKind)
 {
-    JS_ASSERT(type->proto->hasNewType(&JSObject::class_, type));
     JS_ASSERT(parent);
 
     JS_ASSERT(allocKind <= gc::FINALIZE_OBJECT_LAST);
@@ -4222,7 +4221,7 @@ GetPropertyHelperInline(JSContext *cx,
                 return true;
 
             /* Don't warn repeatedly for the same script. */
-            if (!script || script->warnedAboutUndefinedProp)
+            if (!script || script->warnedAboutUndefinedProp())
                 return true;
 
             /* We may just be checking if that object has an iterator. */
@@ -4237,7 +4236,7 @@ GetPropertyHelperInline(JSContext *cx,
             }
 
             unsigned flags = JSREPORT_WARNING | JSREPORT_STRICT;
-            script->warnedAboutUndefinedProp = true;
+            script->setWarnedAboutUndefinedProp();
 
             /* Ok, bad undefined property reference: whine about it. */
             RootedValue val(cx, IdToValue(id));
@@ -4484,7 +4483,7 @@ MaybeReportUndeclaredVarAssignment(JSContext *cx, JSString *propname)
 
         // If the code is not strict and extra warnings aren't enabled, then no
         // check is needed.
-        if (!script->strict && !cx->options().extraWarnings())
+        if (!script->strict() && !cx->options().extraWarnings())
             return true;
     }
 
@@ -4508,7 +4507,7 @@ js::ReportIfUndeclaredVarAssignment(JSContext *cx, HandleString propname)
 
         // If the code is not strict and extra warnings aren't enabled, then no
         // check is needed.
-        if (!script->strict && !cx->options().extraWarnings())
+        if (!script->strict() && !cx->options().extraWarnings())
             return true;
 
         /*
@@ -5442,8 +5441,8 @@ dumpValue(const Value &v)
         }
         if (fun->hasScript()) {
             JSScript *script = fun->nonLazyScript();
-            fprintf(stderr, " (%s:%u)",
-                    script->filename() ? script->filename() : "", script->lineno);
+            fprintf(stderr, " (%s:%d)",
+                    script->filename() ? script->filename() : "", (int) script->lineno());
         }
         fprintf(stderr, " at %p>", (void *) fun);
     } else if (v.isObject()) {
@@ -5669,7 +5668,7 @@ js_DumpStackFrame(JSContext *cx, StackFrame *start)
         fputc('\n', stderr);
 
         fprintf(stderr, "file %s line %u\n",
-                i.script()->filename(), (unsigned) i.script()->lineno);
+                i.script()->filename(), (unsigned) i.script()->lineno());
 
         if (jsbytecode *pc = i.pc()) {
             fprintf(stderr, "  pc = %p\n", pc);

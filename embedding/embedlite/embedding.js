@@ -1,9 +1,6 @@
 pref("dom.w3c_touch_events.enabled", 1);
-pref("plugin.disable", true);
-pref("dom.ipc.plugins.enabled", true);
 pref("plugins.force.wmode", "opaque");
 pref("browser.xul.error_pages.enabled", true);
-pref("gfx.color_management.mode", 0);
 pref("nglayout.debug.paint_flashing", false);
 pref("nglayout.debug.widget_update_flashing", false);
 // Perf trick, speedup motion handlers
@@ -44,26 +41,18 @@ pref("webgl.force-enabled", true);
 // Setup dumping enabled for development
 pref("browser.dom.window.dump.enabled", true);
 pref("layers.acceleration.draw-fps", false);
-// SetPref(QString("browser.xul.error_pages.enabled", false);
-// Bug 706179 async animation temporary prefs
-pref("layers.offmainthreadcomposition.animate-opacity", true);
-pref("layers.offmainthreadcomposition.animate-transform", true);
 pref("layers.use-deprecated-textures", false);
 pref("layers.force-tiles", true);
 pref("font.size.inflation.disabledInMasterProcess", true);
-pref("gfx.azpc.pan_repaint_interval", 5050);
-pref("gfx.azpc.fling_repaint_interval", 75);
-pref("gfx.use_tiled_thebes", true);
-pref("gfx.azpc.y_skate_size_multiplier", "4.5f");
-pref("gfx.azpc.y_stationary_size_multiplier", "4.5f");
-pref("gfx.axis.max_event_acceleration", "12.0f");
-pref("gfx.axis.acceleration_multiplier", "1.125f");
-pref("gfx.axis.velocity_multiplier", "0.55f");
-pref("gfx.axis.fling_friction", "0.00345f");
-pref("gfx.azpc.min_skate_speed", "10.0f");
-pref("gfx.azpc.tweak_fling_velocity", false);
-pref("gfx.azpc.vertical_scroll_lock_ratio", "1.2f");
-pref("apzc.axis_lock_mode", 1);
+pref("apz.pan_repaint_interval", 50);
+pref("apz.fling_repaint_interval", 75);
+pref("apz.y_skate_size_multiplier", "4.5f");
+pref("apz.y_stationary_size_multiplier", "4.5f");
+pref("apz.max_event_acceleration", "12.0f");
+pref("apz.acceleration_multiplier", "1.125f");
+pref("apz.fling_friction", "0.00345f");
+pref("apz.min_skate_speed", "10.0f");
+pref("apz.axis_lock_mode", 2);
 pref("ui.dragThresholdX", 25);
 pref("ui.dragThresholdY", 25);
 pref("embedlite.dispatch_mouse_events", false); // Will dispatch mouse events if page using them
@@ -142,8 +131,8 @@ pref("layout.css.report_errors", false);
 
 /* password manager */
 pref("signon.rememberSignons", true);
+pref("signon.autofillForms", true);
 pref("signon.expireMasterPassword", false);
-pref("signon.SignonFileName", "signons.txt");
 pref("signon.debug", false);
 
 /* form helper */
@@ -232,9 +221,6 @@ pref("privacy.item.geolocation", true);
 pref("privacy.item.siteSettings", true);
 pref("privacy.item.syncAccount", true);
 
-// Disable methodjit in chrome to save memory
-pref("javascript.options.methodjit.chrome",  false);
-
 // Disable the JS engine's gc on memory pressure, since we do one in the mobile
 // browser (bug 669346).
 pref("javascript.options.gc_on_memory_pressure", false);
@@ -254,7 +240,7 @@ pref("font.size.inflation.minTwips", 120);
 pref("browser.ui.zoom.force-user-scalable", false);
 
 // plugins
-pref("plugin.disable", false);
+pref("plugin.disable", true);
 pref("dom.ipc.plugins.enabled", false);
 
 pref("plugins.click_to_play", true);
@@ -270,7 +256,6 @@ pref("layers.low-precision-resolution", 250);
 
 // prevent tooltips from showing up
 pref("browser.chrome.toolbar_tips", false);
-pref("indexedDB.feature.enabled", true);
 pref("dom.indexedDB.warningQuota", 5);
 
 // prevent video elements from preloading too much data
@@ -279,7 +264,7 @@ pref("media.preload.auto", 2);    // preload metadata if preload=auto
 
 // optimize images memory usage
 pref("image.mem.decodeondraw", true);
-pref("content.image.allow_locking", false);
+pref("image.mem.allow_locking_in_content_processes", false);
 pref("image.mem.min_discard_timeout_ms", 10000);
 
 // SimplePush

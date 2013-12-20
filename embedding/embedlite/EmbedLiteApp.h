@@ -62,8 +62,8 @@ public:
 
   enum RenderType {
     RENDER_AUTO,// Default value
-    RENDER_SW, // Initialize XPCOM in child thread
-    RENDER_HW // Initialize XPCOM in separate process
+    RENDER_SW,  // Initialize software rendering
+    RENDER_HW   // Initialize hardware accelerated rendering
   };
 
   // Set Listener interface for EmbedLiteApp notifications

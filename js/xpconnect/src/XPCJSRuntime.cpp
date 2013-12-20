@@ -14,6 +14,7 @@
 #include "XPCJSMemoryReporter.h"
 #include "WrapperFactory.h"
 #include "dom_quickstubs.h"
+#include "mozJSComponentLoader.h"
 
 #include "nsIMemoryReporter.h"
 #include "nsIObserverService.h"
@@ -674,7 +675,7 @@ CanSkipWrappedJS(nsXPCWrappedJS *wrappedJS)
     // If traversing wrappedJS wouldn't release it, nor
     // cause any other objects to be added to the graph, no
     // need to add it to the graph at all.
-    bool isRootWrappedJS = wrappedJS->GetRootWrapper() == wrappedJS;
+    bool isRootWrappedJS = wrappedJS->IsRootWrapper();
     if (nsCCUncollectableMarker::sGeneration &&
         (!obj || !xpc_IsGrayGCThing(obj)) &&
         !wrappedJS->IsSubjectToFinalization() &&
@@ -1790,7 +1791,7 @@ private:
         rtTotal += amount;                                                    \
     } while (0)
 
-NS_MEMORY_REPORTER_MALLOC_SIZEOF_FUN(JSMallocSizeOf)
+MOZ_DEFINE_MALLOC_SIZE_OF(JSMallocSizeOf)
 
 namespace xpc {
 
@@ -2394,10 +2395,10 @@ ReportJSRuntimeExplicitTreeStats(const JS::RuntimeStats &rtStats,
 
 } // namespace xpc
 
-class JSMainRuntimeCompartmentsReporter MOZ_FINAL : public MemoryMultiReporter
+class JSMainRuntimeCompartmentsReporter MOZ_FINAL : public nsIMemoryReporter
 {
   public:
-    JSMainRuntimeCompartmentsReporter() {}
+    NS_DECL_ISUPPORTS
 
     typedef js::Vector<nsCString, 0, js::SystemAllocPolicy> Paths;
 
@@ -2436,7 +2437,9 @@ class JSMainRuntimeCompartmentsReporter MOZ_FINAL : public MemoryMultiReporter
     }
 };
 
-NS_MEMORY_REPORTER_MALLOC_SIZEOF_FUN(OrphanMallocSizeOf)
+NS_IMPL_ISUPPORTS1(JSMainRuntimeCompartmentsReporter, nsIMemoryReporter)
+
+MOZ_DEFINE_MALLOC_SIZE_OF(OrphanMallocSizeOf)
 
 namespace xpc {
 
@@ -2628,9 +2631,13 @@ JSReporter::CollectReports(WindowPaths *windowPaths,
     if (!JS::CollectRuntimeStats(xpcrt->Runtime(), &rtStats, &orphanReporter))
         return NS_ERROR_FAILURE;
 
-    size_t xpconnect =
-        xpcrt->SizeOfIncludingThis(JSMallocSizeOf) +
-        XPCWrappedNativeScope::SizeOfAllScopesIncludingThis(JSMallocSizeOf);
+    size_t xpconnect = xpcrt->SizeOfIncludingThis(JSMallocSizeOf);
+
+    XPCWrappedNativeScope::ScopeSizeInfo sizeInfo(JSMallocSizeOf);
+    XPCWrappedNativeScope::AddSizeOfAllScopesIncludingThis(&sizeInfo);
+
+    mozJSComponentLoader* loader = mozJSComponentLoader::Get();
+    size_t jsComponentLoaderSize = loader ? loader->SizeOfIncludingThis(JSMallocSizeOf) : 0;
 
     // This is the second step (see above).  First we report stuff in the
     // "explicit" tree, then we report other stuff.
@@ -2709,13 +2716,25 @@ JSReporter::CollectReports(WindowPaths *windowPaths,
                  KIND_OTHER,
                  rtStats.gcHeapGCThings,
                  "Memory on the garbage-collected JavaScript heap that holds GC things such "
-                 "as objects, strings, scripts, etc.")
+                 "as objects, strings, scripts, etc.");
 
     // Report xpconnect.
 
-    REPORT_BYTES(NS_LITERAL_CSTRING("explicit/xpconnect"),
+    REPORT_BYTES(NS_LITERAL_CSTRING("explicit/xpconnect/runtime"),
                  KIND_HEAP, xpconnect,
-                 "Memory used by XPConnect.");
+                 "Memory used by XPConnect runtime.");
+
+    REPORT_BYTES(NS_LITERAL_CSTRING("explicit/xpconnect/scopes"),
+                 KIND_HEAP, sizeInfo.mScopeAndMapSize,
+                 "Memory used by XPConnect scopes.");
+
+    REPORT_BYTES(NS_LITERAL_CSTRING("explicit/xpconnect/proto-iface-cache"),
+                 KIND_HEAP, sizeInfo.mProtoAndIfaceCacheSize,
+                 "Memory used for prototype and interface binding caches.");
+
+    REPORT_BYTES(NS_LITERAL_CSTRING("explicit/xpconnect/js-component-loader"),
+                 KIND_HEAP, jsComponentLoaderSize,
+                 "Memory used by XPConnect's JS component loader.");
 
     return NS_OK;
 }
@@ -2946,7 +2965,7 @@ XPCJSRuntime::XPCJSRuntime(nsXPConnect* aXPConnect)
    mVariantRoots(nullptr),
    mWrappedJSRoots(nullptr),
    mObjectHolderRoots(nullptr),
-   mWatchdogManager(new WatchdogManager(this)),
+   mWatchdogManager(new WatchdogManager(MOZ_THIS_IN_INITIALIZER_LIST())),
    mJunkScope(nullptr),
    mAsyncSnowWhiteFreer(new AsyncFreeSnowWhite())
 {

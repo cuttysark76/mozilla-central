@@ -415,9 +415,7 @@ EmbedLiteViewThreadParent::RecvSyncMessage(const nsString& aMessage,
   }
 
   NS_ENSURE_TRUE(mView, false);
-  char* retval =
-    mView->GetListener()->
-    RecvSyncMessage(aMessage.get(), aJSON.get());
+  char* retval = mView->GetListener()->RecvSyncMessage(aMessage.get(), aJSON.get());
   if (retval) {
     aJSONRetVal->AppendElement(NS_ConvertUTF8toUTF16(nsDependentCString(retval)));
     delete retval;
@@ -698,7 +696,7 @@ EmbedLiteViewThreadParent::GetUniqueID()
 EmbedLiteRenderTarget*
 EmbedLiteViewThreadParent::CreateEmbedLiteRenderTarget(int width, int height)
 {
-  return new EmbedLiteRenderTarget(width, height, mCompositor->GetLayerManager());
+  return new EmbedLiteRenderTarget(width, height, mCompositor);
 }
 
 

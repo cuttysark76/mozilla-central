@@ -52,9 +52,9 @@ EmbedLiteCompositorParent::AllocPLayerTransactionParent(const nsTArray<LayersBac
                                                         bool *aSuccess)
 {
   EmbedLiteView* view = EmbedLiteApp::GetInstance()->GetViewByID(mId);
-  EmbedLiteViewListener* list = view ? view->GetListener() : nullptr;
-  if (list) {
-    list->CompositorCreated();
+  EmbedLiteViewListener* listener = view ? view->GetListener() : nullptr;
+  if (listener) {
+    listener->CompositorCreated();
   }
   return CompositorParent::AllocPLayerTransactionParent(aBackendHints,
                                                         aId,
@@ -71,9 +71,10 @@ EmbedLiteCompositorParent::IsGLBackend()
 bool EmbedLiteCompositorParent::RenderToContext(gfxContext* aContext)
 {
   LOGF();
-  LayerManagerComposite* mgr = GetLayerManager();
-  NS_ENSURE_TRUE(mgr, false);
-  if (!mgr->GetRoot()) {
+  const CompositorParent::LayerTreeState* state = CompositorParent::GetIndirectShadowTree(RootLayerTreeId());
+
+  NS_ENSURE_TRUE(state->mLayerManager, false);
+  if (!state->mLayerManager->GetRoot()) {
     // Nothing to paint yet, just return silently
     return false;
   }
@@ -88,26 +89,26 @@ bool EmbedLiteCompositorParent::RenderGL(mozilla::embedlite::EmbedLiteRenderTarg
   bool retval = true;
   NS_ENSURE_TRUE(IsGLBackend(), false);
 
-  LayerManagerComposite* mgr = GetLayerManager();
+  const CompositorParent::LayerTreeState* state = CompositorParent::GetIndirectShadowTree(RootLayerTreeId());
 
-  if (mgr && IsGLBackend() && aTarget) {
-    static_cast<CompositorOGL*>(mgr->GetCompositor())->SetUserRenderTarget(aTarget->GetRenderSurface());
+  if (state && IsGLBackend() && aTarget) {
+    static_cast<CompositorOGL*>(state->mLayerManager->GetCompositor())->SetUserRenderTarget(aTarget->GetRenderSurface());
   }
 
-  if (mgr && !mgr->GetRoot()) {
+  if (state && state->mLayerManager && state->mLayerManager->GetRoot()) {
     retval = false;
   }
 
-  if (mgr && IsGLBackend()) {
-    mgr->SetWorldTransform(mWorldTransform);
+  if (state && state->mLayerManager && IsGLBackend()) {
+    state->mLayerManager->SetWorldTransform(mWorldTransform);
   }
-  if (mgr && !mActiveClipping.IsEmpty() && mgr->GetRoot()) {
-    mgr->GetRoot()->SetClipRect(&mActiveClipping);
+  if (state && state->mLayerManager && !mActiveClipping.IsEmpty() && state->mLayerManager->GetRoot()) {
+    state->mLayerManager->GetRoot()->SetClipRect(&mActiveClipping);
   }
   CompositorParent::Composite();
 
-  if (mgr && IsGLBackend() && aTarget) {
-    static_cast<CompositorOGL*>(mgr->GetCompositor())->SetUserRenderTarget(nullptr);
+  if (state && IsGLBackend() && aTarget) {
+    static_cast<CompositorOGL*>(state->mLayerManager->GetCompositor())->SetUserRenderTarget(nullptr);
   }
 
   return retval;
@@ -117,9 +118,7 @@ bool
 EmbedLiteCompositorParent::RequestHasHWAcceleratedContext()
 {
   EmbedLiteView* view = EmbedLiteApp::GetInstance()->GetViewByID(mId);
-  if (view && view->GetListener())
-    return view->GetListener()->RequestCurrentGLContext();
-  return false;
+  return view ? view->GetListener()->RequestCurrentGLContext() : false;
 }
 
 void EmbedLiteCompositorParent::SetSurfaceSize(int width, int height)
@@ -184,8 +183,7 @@ void EmbedLiteCompositorParent::ScheduleTask(CancelableTask* task, int time)
     LOGE("view not available.. forgot SuspendComposition call?");
     return;
   }
-  EmbedLiteViewListener* list = view->GetListener();
-  if (!list || !list->Invalidate()) {
+  if (!view->GetListener()->Invalidate()) {
     CompositorParent::ScheduleTask(task, time);
   }
 }

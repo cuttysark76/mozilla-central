@@ -24,6 +24,7 @@ from mozbuild.util import (
     shell_quote,
     StrictOrderingOnAppendList,
 )
+import mozpack.path as mozpath
 from .sandbox_symbols import FinalTargetValue
 
 
@@ -40,10 +41,12 @@ class TreeMetadata(object):
 class ReaderSummary(TreeMetadata):
     """A summary of what the reader did."""
 
-    def __init__(self, total_file_count, total_execution_time):
+    def __init__(self, total_file_count, total_sandbox_execution_time,
+        total_emitter_execution_time):
         TreeMetadata.__init__(self)
         self.total_file_count = total_file_count
-        self.total_execution_time = total_execution_time
+        self.total_sandbox_execution_time = total_sandbox_execution_time
+        self.total_emitter_execution_time = total_emitter_execution_time
 
 
 class SandboxDerived(TreeMetadata):
@@ -169,7 +172,7 @@ class XPIDLFile(SandboxDerived):
         SandboxDerived.__init__(self, sandbox)
 
         self.source_path = source
-        self.basename = os.path.basename(source)
+        self.basename = mozpath.basename(source)
         self.module = module
 
 class Defines(SandboxDerived):
@@ -361,6 +364,10 @@ class TestManifest(SandboxDerived):
         # path is relative from the tests root directory.
         'installs',
 
+        # A list of pattern matching installs to perform. Entries are
+        # (base, pattern, dest).
+        'pattern_installs',
+
         # Where all files for this manifest flavor are installed in the unified
         # test package directory.
         'install_prefix',
@@ -393,13 +400,14 @@ class TestManifest(SandboxDerived):
         SandboxDerived.__init__(self, sandbox)
 
         self.path = path
-        self.directory = os.path.dirname(path)
+        self.directory = mozpath.dirname(path)
         self.manifest = manifest
         self.flavor = flavor
         self.install_prefix = install_prefix
         self.manifest_relpath = relpath
         self.dupe_manifest = dupe_manifest
         self.installs = {}
+        self.pattern_installs = []
         self.tests = []
         self.external_installs = set()
 
