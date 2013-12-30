@@ -7,7 +7,6 @@
 #include "EmbedLog.h"
 
 #include "EmbedLiteCompositorParent.h"
-#include "EmbedLiteRenderTarget.h"
 #include "BasicLayers.h"
 #include "EmbedLiteViewThreadParent.h"
 #include "EmbedLiteApp.h"
@@ -18,7 +17,17 @@
 #include "mozilla/layers/CompositorOGL.h"
 #include "gfxUtils.h"
 
+#include "GLContext.h"                  // for GLContext
+#include "GLScreenBuffer.h"             // for GLScreenBuffer
+#include "SharedSurfaceEGL.h"           // for SurfaceFactory_EGLImage
+#include "SharedSurfaceGL.h"            // for SurfaceFactory_GLTexture, etc
+#include "SurfaceStream.h"              // for SurfaceStream, etc
+#include "SurfaceTypes.h"               // for SurfaceStreamType
+#include "ClientLayerManager.h"         // for ClientLayerManager, etc
+
 using namespace mozilla::layers;
+using namespace mozilla::gfx;
+using namespace mozilla::gl;
 
 namespace mozilla {
 namespace embedlite {
@@ -30,6 +39,8 @@ EmbedLiteCompositorParent::EmbedLiteCompositorParent(nsIWidget* aWidget,
                                                      uint32_t id)
   : CompositorParent(aWidget, aRenderToEGLSurface, aSurfaceWidth, aSurfaceHeight)
   , mId(id)
+  , mCurrentCompositeTask(nullptr)
+  , mWorldOpacity(1.0f)
 {
   AddRef();
   EmbedLiteView* view = EmbedLiteApp::GetInstance()->GetViewByID(mId);
@@ -83,32 +94,38 @@ bool EmbedLiteCompositorParent::RenderToContext(gfxContext* aContext)
   return true;
 }
 
-bool EmbedLiteCompositorParent::RenderGL(mozilla::embedlite::EmbedLiteRenderTarget* aTarget)
+bool EmbedLiteCompositorParent::RenderGL()
 {
   LOGF();
+
+  mCurrentCompositeTask = nullptr;
+
   bool retval = true;
   NS_ENSURE_TRUE(IsGLBackend(), false);
 
   const CompositorParent::LayerTreeState* state = CompositorParent::GetIndirectShadowTree(RootLayerTreeId());
+  NS_ENSURE_TRUE(state && state->mLayerManager, false);
 
-  if (state && IsGLBackend() && aTarget) {
-    static_cast<CompositorOGL*>(state->mLayerManager->GetCompositor())->SetUserRenderTarget(aTarget->GetRenderSurface());
-  }
+  GLContext* context = static_cast<CompositorOGL*>(state->mLayerManager->GetCompositor())->gl();
+  NS_ENSURE_TRUE(context, false);
 
-  if (state && state->mLayerManager && state->mLayerManager->GetRoot()) {
-    retval = false;
-  }
+  state->mLayerManager->SetWorldTransform(mWorldTransform);
+  state->mLayerManager->GetCompositor()->SetWorldOpacity(mWorldOpacity);
 
-  if (state && state->mLayerManager && IsGLBackend()) {
-    state->mLayerManager->SetWorldTransform(mWorldTransform);
-  }
-  if (state && state->mLayerManager && !mActiveClipping.IsEmpty() && state->mLayerManager->GetRoot()) {
+  if (!mActiveClipping.IsEmpty() && state->mLayerManager->GetRoot()) {
     state->mLayerManager->GetRoot()->SetClipRect(&mActiveClipping);
   }
   CompositorParent::Composite();
 
-  if (state && IsGLBackend() && aTarget) {
-    static_cast<CompositorOGL*>(state->mLayerManager->GetCompositor())->SetUserRenderTarget(nullptr);
+  if (context->IsOffscreen()) {
+    if (!context->PublishFrame()) {
+      NS_ERROR("Failed to publish context frame");
+    }
+  }
+
+  EmbedLiteView* view = EmbedLiteApp::GetInstance()->GetViewByID(mId);
+  if (view) {
+    view->GetListener()->CompositingFinished();
   }
 
   return retval;
@@ -130,6 +147,11 @@ void EmbedLiteCompositorParent::SetSurfaceSize(int width, int height)
 void EmbedLiteCompositorParent::SetWorldTransform(gfxMatrix aMatrix)
 {
   mWorldTransform = aMatrix;
+}
+
+void EmbedLiteCompositorParent::SetWorldOpacity(float aOpacity)
+{
+  mWorldOpacity = aOpacity;
 }
 
 void EmbedLiteCompositorParent::SetClipping(const gfxRect& aClipRect)
@@ -183,8 +205,10 @@ void EmbedLiteCompositorParent::ScheduleTask(CancelableTask* task, int time)
     LOGE("view not available.. forgot SuspendComposition call?");
     return;
   }
+  task->Cancel();
   if (!view->GetListener()->Invalidate()) {
-    CompositorParent::ScheduleTask(task, time);
+    mCurrentCompositeTask = NewRunnableMethod(this, &EmbedLiteCompositorParent::RenderGL);
+    CompositorParent::ScheduleTask(mCurrentCompositeTask, time);
   }
 }
 

@@ -13,10 +13,31 @@
 #include "gfxContext.h"
 
 #include "EmbedLiteCompositorParent.h"
-#include "EmbedLiteRenderTarget.h"
 #include "mozilla/unused.h"
 #include "EmbedContentController.h"
 #include "mozilla/layers/APZCTreeManager.h"
+#include "EmbedLiteRenderTarget.h"
+
+#include "GLContext.h"                  // for GLContext
+#include "GLScreenBuffer.h"             // for GLScreenBuffer
+#include "SharedSurfaceEGL.h"           // for SurfaceFactory_EGLImage
+#include "SharedSurfaceGL.h"            // for SurfaceFactory_GLTexture, etc
+#include "SurfaceStream.h"              // for SurfaceStream, etc
+#include "SurfaceTypes.h"               // for SurfaceStreamType
+#include "ClientLayerManager.h"         // for ClientLayerManager, etc
+#include "GLUploadHelpers.h"
+#include "GLContextUtils.h"             // for GLContextUtils
+
+#include "BasicLayers.h"
+#include "mozilla/layers/LayerManagerComposite.h"
+#include "mozilla/layers/AsyncCompositionManager.h"
+#include "mozilla/layers/LayerTransactionParent.h"
+#include "mozilla/layers/CompositorOGL.h"
+#include "gfxUtils.h"
+
+
+using namespace mozilla::gfx;
+using namespace mozilla::gl;
 
 using namespace mozilla::layers;
 using namespace mozilla::widget;
@@ -34,6 +55,7 @@ EmbedLiteViewThreadParent::EmbedLiteViewThreadParent(const uint32_t& id, const u
   , mInTouchProcess(false)
   , mUILoop(MessageLoop::current())
   , mLastIMEState(0)
+  , mUploadTexture(0)
 {
   MOZ_COUNT_CTOR(EmbedLiteViewThreadParent);
   MOZ_ASSERT(mView, "View destroyed during OMTC view construction");
@@ -454,10 +476,10 @@ EmbedLiteViewThreadParent::RenderToImage(unsigned char* aData, int imgW, int img
 }
 
 bool
-EmbedLiteViewThreadParent::RenderGL(mozilla::embedlite::EmbedLiteRenderTarget* aTarget)
+EmbedLiteViewThreadParent::RenderGL()
 {
   if (mCompositor) {
-    return mCompositor->RenderGL(aTarget);
+    return mCompositor->RenderGL();
   }
   return false;
 }
@@ -513,6 +535,14 @@ EmbedLiteViewThreadParent::SetViewClipping(const gfxRect& aClipRect)
 {
   if (mCompositor) {
     mCompositor->SetClipping(aClipRect);
+  }
+}
+
+void
+EmbedLiteViewThreadParent::SetViewOpacity(const float aOpacity)
+{
+  if (mCompositor) {
+    mCompositor->SetWorldOpacity(aOpacity);
   }
 }
 
@@ -693,12 +723,70 @@ EmbedLiteViewThreadParent::GetUniqueID()
   return mId;
 }
 
-EmbedLiteRenderTarget*
-EmbedLiteViewThreadParent::CreateEmbedLiteRenderTarget(int width, int height)
+bool EmbedLiteViewThreadParent::GetPendingTexture(EmbedLiteRenderTarget* aContextWrapper, int* textureID, int* width, int* height)
 {
-  return new EmbedLiteRenderTarget(width, height, mCompositor);
-}
+  NS_ENSURE_TRUE(aContextWrapper && textureID && width && height, false);
+  NS_ENSURE_TRUE(mCompositor, false);
 
+  const CompositorParent::LayerTreeState* state = CompositorParent::GetIndirectShadowTree(mCompositor->RootLayerTreeId());
+  NS_ENSURE_TRUE(state && state->mLayerManager, false);
+
+  GLContext* context = static_cast<CompositorOGL*>(state->mLayerManager->GetCompositor())->gl();
+  NS_ENSURE_TRUE(context && context->IsOffscreen(), false);
+
+  GLContext* consumerContext = aContextWrapper->GetConsumerContext();
+  NS_ENSURE_TRUE(consumerContext && consumerContext->Init(), false);
+
+  SharedSurface* sharedSurf = context->RequestFrame();
+  NS_ENSURE_TRUE(sharedSurf, false);
+
+  gfxImageSurface* toUpload = nullptr;
+  GLint textureHandle = 0;
+  if (sharedSurf->Type() == SharedSurfaceType::EGLImageShare) {
+    SharedSurface_EGLImage* eglImageSurf = SharedSurface_EGLImage::Cast(sharedSurf);
+    textureHandle = eglImageSurf->AcquireConsumerTexture(consumerContext);
+    if (!textureHandle) {
+      NS_WARNING("Failed to get texture handle, fallback to pixels?");
+      toUpload = eglImageSurf->GetPixels();
+    }
+  } else if (sharedSurf->Type() == SharedSurfaceType::GLTextureShare) {
+    SharedSurface_GLTexture* glTexSurf = SharedSurface_GLTexture::Cast(sharedSurf);
+    glTexSurf->SetConsumerGL(consumerContext);
+    textureHandle = glTexSurf->Texture();
+    NS_ASSERTION(textureHandle, "Failed to get texture handle, fallback to pixels?");
+  } else if (sharedSurf->Type() == SharedSurfaceType::Basic) {
+    toUpload = SharedSurface_Basic::Cast(sharedSurf)->GetData();
+  } else {
+    NS_ERROR("Unhandled Image type");
+  }
+
+  if (toUpload) {
+    // mBounds seems to end up as (0,0,0,0) a lot, so don't use it?
+    nsIntSize size(toUpload->GetSize());
+    nsIntRect rect(nsIntPoint(0,0), size);
+    nsIntRegion bounds(rect);
+    UploadSurfaceToTexture(consumerContext,
+                           toUpload,
+                           bounds,
+                           mUploadTexture,
+                           true);
+    textureHandle = mUploadTexture;
+  } else if (textureHandle) {
+    if (consumerContext) {
+      MOZ_ASSERT(consumerContext);
+      if (consumerContext->MakeCurrent()) {
+        consumerContext->fDeleteTextures(1, &mUploadTexture);
+      }
+    }
+  }
+
+  NS_ASSERTION(textureHandle, "Failed to get texture handle from EGLImage, fallback to pixels?");
+
+  *width = sharedSurf->Size().width;
+  *height = sharedSurf->Size().height;
+  *textureID = textureHandle;
+  return true;
+}
 
 } // namespace embedlite
 } // namespace mozilla

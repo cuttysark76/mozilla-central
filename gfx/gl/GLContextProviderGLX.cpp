@@ -130,6 +130,7 @@ GLXLibrary::EnsureInitialized(LibType libType)
         { (PRFuncPtr*) &xSwapBuffersInternal, { "glXSwapBuffers", nullptr } },
         { (PRFuncPtr*) &xQueryVersionInternal, { "glXQueryVersion", nullptr } },
         { (PRFuncPtr*) &xGetCurrentContextInternal, { "glXGetCurrentContext", nullptr } },
+        { (PRFuncPtr*) &xGetCurrentDrawableInternal, { "glXGetCurrentDrawable", nullptr } },
         { (PRFuncPtr*) &xWaitGLInternal, { "glXWaitGL", nullptr } },
         { (PRFuncPtr*) &xWaitXInternal, { "glXWaitX", nullptr } },
         /* functions introduced in GLX 1.1 */
@@ -548,6 +549,15 @@ GLXLibrary::xGetCurrentContext()
     return result;
 }
 
+GLXDrawable
+GLXLibrary::xGetCurrentDrawable()
+{
+    BEFORE_GLX_CALL;
+    GLXDrawable result = xGetCurrentDrawableInternal();
+    AFTER_GLX_CALL;
+    return result;
+}
+
 /* static */ void*
 GLXLibrary::xGetProcAddress(const char *procName)
 {
@@ -781,6 +791,7 @@ TRY_AGAIN_NO_SHARING:
         error = false;
 
         GLXContext glxContext = shareContext ? shareContext->mContext : nullptr;
+
         if (glx.HasRobustness()) {
             int attrib_list[] = {
                 LOCAL_GL_CONTEXT_FLAGS_ARB, LOCAL_GL_CONTEXT_ROBUST_ACCESS_BIT_ARB,
@@ -864,6 +875,10 @@ TRY_AGAIN_NO_SHARING:
 
     bool Init()
     {
+        if (mInitialized) {
+            return true;
+        }
+
         SetupLookupFunction();
         if (!InitWithPrefix("gl", true)) {
             return false;
@@ -877,9 +892,6 @@ TRY_AGAIN_NO_SHARING:
 
     bool MakeCurrentImpl(bool aForce = false)
     {
-        if (mPlatformContext)
-            return true;
-
         bool succeeded = true;
 
         // With the ATI FGLRX driver, glxMakeCurrent is very slow even when the context doesn't change.
@@ -1013,7 +1025,7 @@ AreCompatibleVisuals(Visual *one, Visual *two)
 static nsRefPtr<GLContext> gGlobalContext[GLXLibrary::LIBS_MAX];
 
 already_AddRefed<GLContext>
-GLContextProviderGLX::CreateForWindow(nsIWidget *aWidget)
+GLContextProviderGLX::CreateForEmbedded(ContextFlags flags)
 {
     const LibType libType = GLXLibrary::OPENGL_LIB;
     if (!sDefGLXLib.EnsureInitialized(libType)) {
@@ -1021,37 +1033,44 @@ GLContextProviderGLX::CreateForWindow(nsIWidget *aWidget)
     }
 
     bool doubleBuffered = true;
-    bool hasNativeContext = aWidget->HasGLContext();
     GLXContext glxContext = sDefGLXLib.xGetCurrentContext();
-    if (hasNativeContext && glxContext) {
+    if (glxContext) {
         void* platformContext = glxContext;
         SurfaceCaps caps = SurfaceCaps::Any();
-        int depth = gfxPlatform::GetPlatform()->GetScreenDepth();
-        caps.bpp16 = depth == 16 ? true : false;
-        caps.depth = depth;
         nsRefPtr<GLContextGLX> glContext =
             new GLContextGLX(caps,
                              nullptr, // SharedContext
                              false, // Offscreen
-                             (Display*)nullptr, // Display
-                             (GLXDrawable)nullptr, //aDrawable
+                             (Display*)DefaultXDisplay(), // Display
+                             (GLXDrawable)sDefGLXLib.xGetCurrentDrawable(),
                              glxContext,
                              false, // aDeleteDrawable,
                              doubleBuffered,
                              (gfxXlibSurface*)nullptr, // aPixmap
                              libType);
 
-        if (!glContext->Init())
-            return nullptr;
-
-        glContext->MakeCurrent();
         glContext->SetPlatformContext(platformContext);
-        gGlobalContext[libType] = glContext;
-        gGlobalContext[libType]->SetIsGlobalSharedContext(true);
+        if (flags == ContextFlagsGlobal) {
+            gGlobalContext[libType] = glContext;
+            gGlobalContext[libType]->SetIsGlobalSharedContext(true);
+        }
 
         return glContext.forget();
     }
+    return nullptr;
+}
 
+already_AddRefed<GLContext>
+GLContextProviderGLX::CreateForWindow(nsIWidget *aWidget)
+{
+    const LibType libType = GLXLibrary::OPENGL_LIB;
+    if (!sDefGLXLib.EnsureInitialized(libType)) {
+        return nullptr;
+    }
+
+    if (aWidget->HasGLContext()) {
+        return CreateForEmbedded();
+    }
 
     // Currently, we take whatever Visual the window already has, and
     // try to create an fbconfig for that visual.  This isn't

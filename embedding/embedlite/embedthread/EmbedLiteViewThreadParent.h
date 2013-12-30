@@ -8,6 +8,7 @@
 
 #include "mozilla/embedlite/PEmbedLiteViewParent.h"
 #include "EmbedLiteViewImplIface.h"
+#include "GLDefs.h"
 
 namespace mozilla {
 namespace embedlite {
@@ -35,11 +36,12 @@ public:
   virtual void LoadFrameScript(const char* aURI);
   virtual void DoSendAsyncMessage(const PRUnichar* aMessageName, const PRUnichar* aMessage);
   virtual bool RenderToImage(unsigned char* aData, int imgW, int imgH, int stride, int depth);
-  virtual bool RenderGL(mozilla::embedlite::EmbedLiteRenderTarget*);
+  virtual bool RenderGL();
   virtual void SetViewSize(int width, int height);
   virtual void SetGLViewPortSize(int width, int height);
   virtual void SetGLViewTransform(gfxMatrix matrix);
   virtual void SetViewClipping(const gfxRect& aClipRect);
+  virtual void SetViewOpacity(const float aOpacity);
   virtual void SetTransformation(float aScale, nsIntPoint aScrollOffset);
   virtual void ScheduleRender();
   virtual void UpdateScrollController();
@@ -58,7 +60,7 @@ public:
   virtual void AddMessageListeners(const nsTArray<nsString>&);
   virtual void RemoveMessageListeners(const nsTArray<nsString>&);
 
-  EmbedLiteRenderTarget* CreateEmbedLiteRenderTarget(int width, int height);
+  virtual bool GetPendingTexture(EmbedLiteRenderTarget* aContextWrapper, int* textureID, int* width, int* height);
 
   EmbedLiteCompositorParent* GetCompositor() { return mCompositor.get(); };
 
@@ -150,6 +152,7 @@ private:
 
   uint64_t mRootLayerTreeId;
   nsRefPtr<EmbedContentController> mController;
+  GLuint mUploadTexture;
 
   DISALLOW_EVIL_CONSTRUCTORS(EmbedLiteViewThreadParent);
 };

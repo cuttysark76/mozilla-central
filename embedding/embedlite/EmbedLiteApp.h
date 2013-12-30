@@ -25,6 +25,7 @@ class EmbedLiteAppThreadChild;
 class EmbedLiteAppThreadParent;
 class EmbedLiteSubThread;
 class EmbedLiteView;
+class EmbedLiteRenderTarget;
 class EmbedLiteAppListener
 {
 public:
@@ -127,6 +128,9 @@ public:
   virtual void RemoveObserver(const char* aMessageName);
   virtual void AddObservers(nsTArray<nsCString>& observersList);
   virtual void RemoveObservers(nsTArray<nsCString>& observersList);
+
+  // Create wrapper for current active GL context, for proper GL sharing.
+  virtual EmbedLiteRenderTarget* CreateEmbedLiteRenderTarget();
 
   // Only one EmbedHelper object allowed
   static EmbedLiteApp* GetInstance();

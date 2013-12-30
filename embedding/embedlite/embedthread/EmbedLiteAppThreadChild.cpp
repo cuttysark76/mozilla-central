@@ -21,6 +21,7 @@
 #include "nsIURI.h"
 #include "nsIStyleSheetService.h"
 #include "nsNetUtil.h"
+#include "gfxPlatform.h"
 
 #include "EmbedLiteViewThreadChild.h"
 #include "mozilla/unused.h"
@@ -81,6 +82,7 @@ EmbedLiteAppThreadChild::Init(MessageChannel* aParentChannel)
   MOZ_ASSERT(NS_SUCCEEDED(rv));
 
   SendInitialized();
+
   nsCOMPtr<nsIObserverService> observerService =
     do_GetService(NS_OBSERVERSERVICE_CONTRACTID);
 

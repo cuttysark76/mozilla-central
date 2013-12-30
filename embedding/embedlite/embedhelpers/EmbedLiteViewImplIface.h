@@ -32,7 +32,7 @@ class EmbedLiteViewImplIface
     virtual void AddMessageListeners(const nsTArray<nsString>&) {}
     virtual void RemoveMessageListeners(const nsTArray<nsString>&) {}
     virtual bool RenderToImage(unsigned char* aData, int imgW, int imgH, int stride, int depth) { return false; }
-    virtual bool RenderGL(mozilla::embedlite::EmbedLiteRenderTarget*) { return false; }
+    virtual bool RenderGL() { return false; }
     virtual void SetIsActive(bool) {}
     virtual void SetIsFocused(bool) {}
     virtual void SuspendTimeouts() {}
@@ -41,6 +41,7 @@ class EmbedLiteViewImplIface
     virtual void SetGLViewPortSize(int width, int height) {}
     virtual void SetGLViewTransform(gfxMatrix matrix) {}
     virtual void SetViewClipping(const gfxRect& aClipRect) {}
+    virtual void SetViewOpacity(const float aOpacity) {}
     virtual void SetTransformation(float aScale, nsIntPoint aScrollOffset) {}
     virtual void ScheduleRender() {}
     virtual void SetClipping(nsIntRect aClipRect) {}
@@ -55,7 +56,7 @@ class EmbedLiteViewImplIface
     virtual void UpdateScrollController() {}
     virtual void ViewAPIDestroyed() {}
     virtual uint32_t GetUniqueID() { return 0; }
-    virtual EmbedLiteRenderTarget* CreateEmbedLiteRenderTarget(int width, int height) { return 0; }
+    virtual bool GetPendingTexture(mozilla::embedlite::EmbedLiteRenderTarget* aContextWrapper, int* textureID, int* width, int* height) { return false; }
 };
 
 } // namespace embedlite

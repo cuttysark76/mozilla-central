@@ -24,6 +24,7 @@
 #include "EmbedLiteView.h"
 #include "nsXULAppAPI.h"
 #include "EmbedLiteMessagePump.h"
+#include "EmbedLiteRenderTarget.h"
 
 #include "EmbedLiteCompositorParent.h"
 
@@ -71,6 +72,12 @@ EmbedLiteApp::~EmbedLiteApp()
     free(mProfilePath);
     mProfilePath = nullptr;
   }
+}
+
+EmbedLiteRenderTarget*
+EmbedLiteApp::CreateEmbedLiteRenderTarget()
+{
+  return new EmbedLiteRenderTarget();
 }
 
 void
@@ -447,11 +454,11 @@ EmbedLiteApp::SetIsAccelerated(bool aIsAccelerated)
 void
 EmbedLiteApp::Initialized()
 {
-  if (mIsCompositeInMainThread) {
-    mozilla::layers::CompositorParent::StartUpWithExistingThread(MessageLoop::current(), PlatformThread::CurrentId());
-  }
   if (mListener) {
     mListener->Initialized();
+  }
+  if (mIsCompositeInMainThread) {
+    mozilla::layers::CompositorParent::StartUpWithExistingThread(MessageLoop::current(), PlatformThread::CurrentId());
   }
 }
 

@@ -3,15 +3,15 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-#ifndef EMBED_LITE_RENDER_TARGET_H
-#define EMBED_LITE_RENDER_TARGET_H
+#ifndef EMBED_LITE_CONTEXT_WRAPPER_H
+#define EMBED_LITE_CONTEXT_WRAPPER_H
 
 #include "mozilla/embedlite/EmbedLiteApp.h"
+#include "mozilla/RefPtr.h"
 
 namespace mozilla {
-namespace layers {
-class CompositingRenderTarget;
-class CompositorParent;
+namespace gl {
+class GLContext;
 }
 namespace embedlite {
 
@@ -20,19 +20,18 @@ class EmbedLiteRenderTarget
 public:
   virtual ~EmbedLiteRenderTarget();
 
-  virtual int texture();
-  virtual int fbo();
-
 private:
-  friend class EmbedLiteCompositorParent;
   friend class EmbedLiteViewThreadParent;
-  EmbedLiteRenderTarget(int width, int height, mozilla::layers::CompositorParent* aComposite);
-  virtual mozilla::layers::CompositingRenderTarget* GetRenderSurface() { return mCurrentRenderTarget; }
+  virtual bool EnsureInitialized();
+  mozilla::gl::GLContext* GetConsumerContext() { return mGLContext.get(); }
 
-  RefPtr<mozilla::layers::CompositingRenderTarget> mCurrentRenderTarget;
+  friend class EmbedLiteApp;
+  EmbedLiteRenderTarget();
+
+  RefPtr<mozilla::gl::GLContext> mGLContext;
 };
 
 } // namespace embedlite
 } // namespace mozilla
 
-#endif // EMBED_LITE_RENDER_TARGET_H
+#endif // EMBED_LITE_CONTEXT_WRAPPER_H

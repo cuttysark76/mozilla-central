@@ -6,40 +6,27 @@
 #define LOG_COMPONENT "EmbedLiteRenderTarget"
 #include "EmbedLog.h"
 
-#include "mozilla/layers/CompositorParent.h"
 #include "EmbedLiteRenderTarget.h"
-#include "EmbedLiteApp.h"
-#include "mozilla/layers/CompositingRenderTargetOGL.h"
-#include "mozilla/layers/LayerManagerComposite.h"
-#include "mozilla/gfx/Rect.h"
+#include "GLContext.h"
+#include "GLContextProvider.h"
 
-using namespace mozilla::layers;
-using namespace mozilla::gfx;
+using namespace mozilla::gl;
 using namespace mozilla::embedlite;
 
-EmbedLiteRenderTarget::EmbedLiteRenderTarget(int width, int height, CompositorParent* aCompositor)
+EmbedLiteRenderTarget::EmbedLiteRenderTarget()
 {
-  SurfaceInitMode mode = INIT_MODE_CLEAR;
-  IntRect rect(0, 0, width, height);
-  const CompositorParent::LayerTreeState* state = CompositorParent::GetIndirectShadowTree(aCompositor->RootLayerTreeId());
+  nsRefPtr<GLContext> ctx = GLContextProvider::CreateForEmbedded(ContextFlagsGlobal);
 
-  mCurrentRenderTarget = static_cast<CompositorOGL*>(state->mLayerManager->GetCompositor())->CreateRenderTarget(rect, mode);
+  MOZ_ASSERT(ctx);
+  mGLContext = ctx;
+}
+
+bool EmbedLiteRenderTarget::EnsureInitialized()
+{
+  MOZ_ASSERT(mGLContext);
+  return mGLContext->Init();
 }
 
 EmbedLiteRenderTarget::~EmbedLiteRenderTarget()
 {
-}
-
-int
-EmbedLiteRenderTarget::texture()
-{
-    mozilla::layers::CompositingRenderTargetOGL* ml = static_cast<mozilla::layers::CompositingRenderTargetOGL*>(mCurrentRenderTarget.get());
-    return (int)ml->GetTextureHandle();
-}
-
-int
-EmbedLiteRenderTarget::fbo()
-{
-    mozilla::layers::CompositingRenderTargetOGL* ml = static_cast<mozilla::layers::CompositingRenderTargetOGL*>(mCurrentRenderTarget.get());
-    return (int)ml->GetFBO();
 }

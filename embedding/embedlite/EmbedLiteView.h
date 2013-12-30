@@ -48,6 +48,7 @@ public:
   virtual void CompositorCreated() { }
   //   Invalidate notification
   virtual bool Invalidate() { return false; }
+  virtual void CompositingFinished() { }
   virtual void SetFirstPaintViewport(const nsIntPoint& aOffset, float aZoom,
                                      const nsIntRect& aPageRect, const gfxRect& aCssPageRect) {}
   virtual void SyncViewportInfo(const nsIntRect& aDisplayPort,
@@ -119,13 +120,15 @@ public:
   virtual bool RenderToImage(unsigned char* aData, int imgW, int imgH, int stride, int depth);
 
   //   GL Rendering setuo
-  virtual bool RenderGL(EmbedLiteRenderTarget* aTarget = 0);
+  virtual bool RenderGL();
   //   Setup renderable GL/EGL window surface size
   virtual void SetGLViewPortSize(int width, int height);
   //   GL world transform offset and simple rotation are allowed (orientation change)
   virtual void SetGLViewTransform(gfxMatrix matrix);
   //   Setup Clipping on view area, required if view gl area need to be particulary clipped withing target widget area
   virtual void SetViewClipping(float aX, float aY, float aWidth, float aHeight);
+  //   Setup view opacity for direct GL rendering
+  virtual void SetViewOpacity(float aOpacity);
 
   // Set Custom transform for compositor layers tree, Fast Scroll/Zoom
   virtual void SetTransformation(float aScale, nsIntPoint aScrollOffset);
@@ -146,7 +149,7 @@ public:
   virtual void SendAsyncMessage(const PRUnichar* aMessageName, const PRUnichar* aMessage);
 
   virtual uint32_t GetUniqueID();
-  virtual EmbedLiteRenderTarget* CreateEmbedLiteRenderTarget(int width, int height);
+  virtual bool GetPendingTexture(EmbedLiteRenderTarget* aContextWrapper, int* textureID, int* width, int* height);
 
 private:
   friend class EmbedLiteViewThreadParent;
