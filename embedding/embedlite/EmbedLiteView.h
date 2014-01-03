@@ -129,6 +129,8 @@ public:
   virtual void SetGLViewTransform(gfxMatrix matrix);
   //   Setup Clipping on view area, required if view gl area need to be particulary clipped withing target widget area
   virtual void SetViewClipping(float aX, float aY, float aWidth, float aHeight);
+  //   Setup view opacity for direct GL rendering
+  virtual void SetViewOpacity(float aOpacity);
 
   // Set Custom transform for compositor layers tree, Fast Scroll/Zoom
   virtual void SetTransformation(float aScale, nsIntPoint aScrollOffset);

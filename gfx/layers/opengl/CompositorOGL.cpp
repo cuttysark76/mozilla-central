@@ -1121,7 +1121,7 @@ CompositorOGL::DrawQuad(const Rect& aRect, const Rect& aClipRect,
                                             ThebesFilter(texturedEffect->mFilter));
 
       program->SetTextureUnit(0);
-      program->SetLayerOpacity(aOpacity);
+      program->SetLayerOpacity(aOpacity * mWorldOpacity);
 
       AutoBindTexture bindMask;
       if (maskType != MaskNone) {
@@ -1163,7 +1163,7 @@ CompositorOGL::DrawQuad(const Rect& aRect, const Rect& aClipRect,
       mGLContext->ApplyFilterToBoundTexture(filter);
 
       program->SetYCbCrTextureUnits(Y, Cb, Cr);
-      program->SetLayerOpacity(aOpacity);
+      program->SetLayerOpacity(aOpacity * mWorldOpacity);
       program->SetTextureTransform(gfx3DMatrix());
 
       AutoBindTexture bindMask;
@@ -1187,7 +1187,7 @@ CompositorOGL::DrawQuad(const Rect& aRect, const Rect& aClipRect,
 
       program->Activate();
       program->SetTextureUnit(0);
-      program->SetLayerOpacity(aOpacity);
+      program->SetLayerOpacity(aOpacity * mWorldOpacity);
       program->SetTextureTransform(gfx3DMatrix());
 
       AutoBindTexture bindMask;
@@ -1245,7 +1245,7 @@ CompositorOGL::DrawQuad(const Rect& aRect, const Rect& aClipRect,
         program->Activate();
         program->SetBlackTextureUnit(0);
         program->SetWhiteTextureUnit(1);
-        program->SetLayerOpacity(aOpacity);
+        program->SetLayerOpacity(aOpacity * mWorldOpacity);
         program->SetLayerTransform(aTransform);
         program->SetTextureTransform(gfx3DMatrix());
         program->SetRenderOffset(aOffset.x, aOffset.y);

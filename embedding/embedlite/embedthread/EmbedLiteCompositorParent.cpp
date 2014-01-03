@@ -33,6 +33,7 @@ EmbedLiteCompositorParent::EmbedLiteCompositorParent(nsIWidget* aWidget,
                                                      uint32_t id)
   : CompositorParent(aWidget, aRenderToEGLSurface, aSurfaceWidth, aSurfaceHeight)
   , mId(id)
+  , mWorldOpacity(1.0f)
 {
   AddRef();
   EmbedLiteView* view = EmbedLiteApp::GetInstance()->GetViewByID(mId);
@@ -102,6 +103,7 @@ bool EmbedLiteCompositorParent::RenderGL(mozilla::embedlite::EmbedLiteRenderTarg
 
   if (mgr && IsGLBackend()) {
     mgr->SetWorldTransform(mWorldTransform);
+    mgr->GetCompositor()->SetWorldOpacity(mWorldOpacity);
   }
   if (mgr && !mActiveClipping.IsEmpty() && mgr->GetRoot()) {
     mgr->GetRoot()->SetClipRect(&mActiveClipping);
@@ -133,6 +135,11 @@ void EmbedLiteCompositorParent::SetSurfaceSize(int width, int height)
 void EmbedLiteCompositorParent::SetWorldTransform(gfxMatrix aMatrix)
 {
   mWorldTransform = aMatrix;
+}
+
+void EmbedLiteCompositorParent::SetWorldOpacity(float aOpacity)
+{
+  mWorldOpacity = aOpacity;
 }
 
 void EmbedLiteCompositorParent::SetClipping(const gfxRect& aClipRect)
