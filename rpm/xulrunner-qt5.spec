@@ -11,6 +11,7 @@ Source0:    %{name}-%{version}.tar.bz2
 Patch0:     add-sailfishos-org-certs.patch
 Patch1:     treat-waiting-pinch-state-as-none-when-single-touch.patch
 Patch2:     avoid-crash-when-mTouches-is-empty.patch
+Patch3:     disable-x11-bits.patch
 BuildRequires:  pkgconfig(Qt5Core)
 BuildRequires:  pkgconfig(Qt5Gui)
 BuildRequires:  pkgconfig(Qt5Network)
@@ -68,6 +69,7 @@ Tests and misc files for xulrunner
 %patch0 -p1
 %patch1 -p1
 %patch2 -p1
+%patch3 -p1
 
 %build
 export DONT_POPULATE_VIRTUALENV=1
