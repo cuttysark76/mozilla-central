@@ -37,7 +37,7 @@ BuildRequires:  zip
 BuildRequires:  unzip
 BuildRequires:  hunspell-devel
 BuildRequires:  libjpeg-turbo-devel
-%ifarch i586 i486 i386
+%ifarch i586 i486 i386 x86_64
 BuildRequires:  yasm
 %endif
 BuildRequires:  fdupes
